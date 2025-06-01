@@ -12,10 +12,10 @@ on:
 jobs:
     claude:
         if: |
-            (github.event_name == \"issue_comment\" && contains(github.event.comment.body, \"@claude\")) ||
-            (github.event_name == \"pull_request_review_comment\" && contains(github.event.comment.body, \"@claude\")) ||
-            (github.event_name == \"pull_request_review\" && contains(github.event.review.body, \"@claude\")) ||
-            (github.event_name == \"issues\" && (contains(github.event.issue.body, \"@claude\") || contains(github.event.issue.title, \"@claude\")))
+            (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+            (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+            (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+            (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
 
         runs-on: ubuntu-latest
 
@@ -35,8 +35,8 @@ jobs:
               id: claude
               uses: nyuki0821/claude-code-action@main
               with:
-                  use_oauth: \"true\"
+                  use_oauth: 'true'
                   claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
                   claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
                   claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
-                  model: \"claude-3-opus-20240229\"
+                  model: 'claude-3-opus-20240229'
