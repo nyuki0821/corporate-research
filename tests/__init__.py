@@ -1,0 +1,1 @@
+# Tests for Corporate Information Collection System
