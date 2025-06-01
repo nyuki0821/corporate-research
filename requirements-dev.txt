@@ -1,0 +1,20 @@
+# 開発・テスト用依存関係
+pytest==7.*
+pytest-cov==4.*
+pytest-mock==3.*
+pytest-asyncio==0.*
+
+# コード品質ツール
+flake8==6.*
+black==23.*
+isort==5.*
+pylint==3.*
+mypy==1.*
+
+# デバッグツール
+ipdb==0.*
+ipython==8.*
+
+# ドキュメント
+sphinx==7.*
+sphinx-rtd-theme==2.*
