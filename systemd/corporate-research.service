@@ -1,0 +1,43 @@
+[Unit]
+Description=Corporate Research API Service
+Documentation=https://github.com/nyuki0821/corporate-research
+After=network.target
+
+[Service]
+Type=exec
+User=corporate-research
+Group=corporate-research
+WorkingDirectory=/opt/corporate-research
+Environment="PATH=/opt/corporate-research/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="FLASK_ENV=production"
+Environment="PORT=8080"
+
+# Load environment variables from file
+EnvironmentFile=/opt/corporate-research/.env
+
+# Start command
+ExecStart=/opt/corporate-research/venv/bin/python /opt/corporate-research/server_app.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/corporate-research/logs
+
+# Resource limits
+LimitNOFILE=65536
+MemoryLimit=1G
+CPUQuota=80%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=corporate-research
+
+[Install]
+WantedBy=multi-user.target

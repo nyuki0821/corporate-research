@@ -128,9 +128,27 @@ pip install -r requirements.txt
 
 ### 4. デプロイ
 
+#### Google Cloud Functions へのデプロイ
+
 ```bash
 chmod +x deploy.sh
 ./deploy.sh
+```
+
+#### サーバーへのデプロイ
+
+詳細なサーバーデプロイメントオプションについては、[SERVER_DEPLOYMENT.md](./SERVER_DEPLOYMENT.md) を参照してください。
+
+**利用可能なデプロイオプション:**
+- Docker コンテナ
+- Linux systemd サービス
+- Kubernetes
+- スタンドアロンサーバー
+
+**簡単セットアップ:**
+```bash
+# セットアップスクリプトを実行
+sudo bash scripts/setup_server.sh
 ```
 
 ## 使用方法

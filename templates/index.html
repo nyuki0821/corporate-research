@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企業情報収集システム</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.processing {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .progress {
+            margin-top: 10px;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #007bff;
+            transition: width 0.3s;
+            text-align: center;
+            color: white;
+            line-height: 20px;
+        }
+        .config-status {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .config-item {
+            margin: 5px 0;
+        }
+        .config-item.configured {
+            color: #28a745;
+        }
+        .config-item.not-configured {
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>企業情報収集システム</h1>
+        
+        <div class="config-status" id="configStatus">
+            <strong>設定状態：</strong>
+            <div id="configItems"></div>
+        </div>
+
+        <form id="researchForm">
+            <div class="form-group">
+                <label for="spreadsheetId">Google スプレッドシート ID:</label>
+                <input type="text" id="spreadsheetId" name="spreadsheetId" required 
+                       placeholder="例: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms">
+            </div>
+
+            <div class="form-group">
+                <label for="inputRange">入力範囲:</label>
+                <input type="text" id="inputRange" name="inputRange" required 
+                       placeholder="例: Sheet1!A2:A100">
+            </div>
+
+            <div class="form-group">
+                <label for="outputRange">出力範囲:</label>
+                <input type="text" id="outputRange" name="outputRange" required 
+                       placeholder="例: Sheet1!B2:G100">
+            </div>
+
+            <button type="submit" id="submitBtn">処理を開始</button>
+        </form>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        // Check configuration on load
+        async function checkConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                
+                const configItems = document.getElementById('configItems');
+                configItems.innerHTML = `
+                    <div class="config-item ${config.tavily_configured ? 'configured' : 'not-configured'}">
+                        ✓ Tavily API: ${config.tavily_configured ? '設定済み' : '未設定'}
+                    </div>
+                    <div class="config-item ${config.openai_configured ? 'configured' : 'not-configured'}">
+                        ✓ OpenAI API: ${config.openai_configured ? '設定済み' : '未設定'}
+                    </div>
+                    <div class="config-item ${config.sheets_configured ? 'configured' : 'not-configured'}">
+                        ✓ Google Sheets: ${config.sheets_configured ? '設定済み' : '未設定'}
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Config check failed:', error);
+            }
+        }
+
+        // Form submission
+        document.getElementById('researchForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const statusDiv = document.getElementById('status');
+            
+            // Disable submit button
+            submitBtn.disabled = true;
+            
+            // Show processing status
+            statusDiv.className = 'status processing';
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML = `
+                <strong>処理中...</strong>
+                <div class="progress">
+                    <div class="progress-bar" style="width: 0%">0%</div>
+                </div>
+            `;
+            
+            const formData = {
+                spreadsheet_id: document.getElementById('spreadsheetId').value,
+                input_range: document.getElementById('inputRange').value,
+                output_range: document.getElementById('outputRange').value
+            };
+            
+            try {
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.className = 'status success';
+                    statusDiv.innerHTML = `
+                        <strong>処理完了！</strong><br>
+                        処理された企業数: ${result.result?.processed_count || 0}<br>
+                        <a href="/api/export/${result.job_id}" download>結果をダウンロード</a>
+                    `;
+                } else {
+                    throw new Error(result.error || 'Processing failed');
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = `<strong>エラー:</strong> ${error.message}`;
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Check config on page load
+        checkConfig();
+    </script>
+</body>
+</html>
