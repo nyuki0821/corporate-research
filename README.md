@@ -135,6 +135,31 @@ chmod +x deploy.sh
 
 ## 使用方法
 
+### 🎯 簡単実行（新機能）
+
+#### 起動スクリプト
+```bash
+python run.py
+```
+メニューから選択してCLIまたはWebインターフェースを起動できます。
+
+#### コマンドライン インターフェース (CLI)
+```bash
+# 対話式モード
+python cli.py --interactive
+
+# 直接実行
+python cli.py --spreadsheet-id YOUR_SHEET_ID --input-range "Sheet1!A2:B" --output-range "Sheet1!C2:Z"
+```
+
+#### Web インターフェース
+```bash
+python web_ui.py
+```
+ブラウザで http://localhost:5000 にアクセスして使用します。
+
+詳細は [QUICKSTART.md](QUICKSTART.md) を参照してください。
+
 ### Cloud Functions エンドポイント
 
 #### メインエンドポイント: `/collect_company_info`

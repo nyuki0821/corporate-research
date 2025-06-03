@@ -17,6 +17,12 @@ tenacity==8.2.3
 requests==2.31.0
 python-dotenv==1.0.1
 
+# Web UI
+flask==3.0.0
+
+# CLI enhancements
+colorama==0.4.6
+
 # Testing
 pytest==7.4.4
 pytest-cov==4.1.0
