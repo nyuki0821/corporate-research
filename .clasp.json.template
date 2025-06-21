@@ -1,0 +1,24 @@
+{
+  "scriptId": "YOUR_SCRIPT_ID_HERE",
+  "rootDir": "./",
+  "fileExtension": "gs",
+  "filePushOrder": [
+    "appsscript.json",
+    "src/config/constants.gs",
+    "src/models/company.gs",
+    "src/models/branch.gs",
+    "src/utils/logger.gs",
+    "src/utils/errorHandler.gs",
+    "src/utils/companyNameNormalizer.gs",
+    "src/utils/branchClassifier.gs",
+    "src/utils/reliabilityScorer.gs",
+    "src/api/apiBase.gs",
+    "src/api/tavilyClient.gs",
+    "src/api/openaiClient.gs",
+    "src/services/spreadsheetService.gs",
+    "src/services/batchProcessor.gs",
+    "src/services/companyResearchService.gs",
+    "src/services/notificationService.gs",
+    "src/main.gs"
+  ]
+}

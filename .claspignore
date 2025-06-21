@@ -1,0 +1,50 @@
+# clasp ignore file
+# Files to ignore when pushing to Google Apps Script
+
+# Node modules - 最優先で除外
+node_modules/**
+**/node_modules/**
+node_modules/
+**/node_modules/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# Documentation
+docs/
+README.md
+
+# Test files
+tests/
+
+# Local development files
+*.local.js
+*.test.js
+*.spec.js
+
+# Backup files
+*.backup
+*.bak
+
+# Package files
+package.json
+package-lock.json
+yarn.lock

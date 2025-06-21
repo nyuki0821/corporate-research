@@ -1,0 +1,48 @@
+{
+  "name": "corporate-research-system",
+  "version": "1.0.0",
+  "description": "企業情報自動収集システム - Google Apps Script版",
+  "main": "src/main.gs",
+  "scripts": {
+    "push": "clasp push",
+    "pull": "clasp pull",
+    "deploy": "clasp deploy",
+    "open": "clasp open",
+    "logs": "clasp logs",
+    "setup": "npm run login && npm run create",
+    "login": "clasp login",
+    "create": "clasp create --type standalone --title \"企業情報収集システム\"",
+    "watch": "clasp push --watch",
+    "test:unit": "clasp run runUnitTests",
+    "test:integration": "clasp run runIntegrationTests",
+    "test:all": "clasp run runCompleteSystemTest",
+    "init:system": "clasp run initializeSystem",
+    "start:batch": "clasp run startBatchProcessing",
+    "diagnose": "clasp run diagnoseSystem"
+  },
+  "keywords": [
+    "google-apps-script",
+    "企業情報",
+    "自動化",
+    "web-scraping",
+    "openai",
+    "tavily"
+  ],
+  "author": "Corporate Research Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "@types/google-apps-script": "^1.0.83"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/corporate-research-system.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/corporate-research-system/issues"
+  },
+  "homepage": "https://github.com/your-org/corporate-research-system#readme"
+}
