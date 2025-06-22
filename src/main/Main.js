@@ -434,7 +434,7 @@ var Main = (function() {
         ui.alert('Please enter a valid number between 1 and 8 (execution time limit: 6 minutes)');
         return;
       }
-      
+        
       // Store batch size in script properties
       ConfigManager.set('BATCH_SIZE', batchSize.toString());
       
@@ -442,7 +442,7 @@ var Main = (function() {
       var result = TriggerManager.startBatchProcessing();
       
       if (result.success) {
-        ui.alert('Batch processing started for ' + batchSize + ' companies. You will receive an email notification when complete.');
+      ui.alert('Batch processing started for ' + batchSize + ' companies. You will receive an email notification when complete.');
       } else {
         ui.alert('Error starting batch processing: ' + result.error);
       }

@@ -128,46 +128,44 @@ var TavilyClient = (function() {
       // 電話番号がある場合は、それを活用した精密検索
       var phoneNumber = options && options.phoneNumber ? options.phoneNumber : '';
       
-      // 検索クエリの構築（優先順位順）
+      // 検索クエリの構築（公式サイト最優先）
       var queries = [];
       
-      // 1. 企業名と電話番号の組み合わせ（最も精密）
+      // 1. 公式サイト専用検索（最優先）
+      queries.push(companyName + ' 公式サイト ホームページ official site -求人 -転職 -採用');
+      
+      // 2. 企業名と電話番号の組み合わせ（最も精密）
       if (phoneNumber) {
-        queries.push(companyName + ' ' + phoneNumber + ' 会社概要 企業情報');
+        queries.push(companyName + ' ' + phoneNumber + ' 会社概要 企業情報 -求人 -転職');
       }
       
-      // 2. 企業名と基本情報キーワード
-      queries.push(companyName + ' 会社概要 企業情報 本社 設立 資本金 従業員数 代表取締役');
-      
-      // 3. 企業名と公式サイト検索
-      queries.push(companyName + ' 公式サイト ホームページ official site');
+      // 3. 企業名と基本情報キーワード
+      queries.push(companyName + ' 会社概要 企業情報 本社 設立 資本金 従業員数 代表取締役 -求人 -転職');
       
       // 4. 企業名と所在地情報
-      queries.push(companyName + ' 本社所在地 住所 アクセス 連絡先');
-      
-      // 除外キーワードを追加（求人・転職サイトを除外）
-      var excludeTerms = ' -求人 -転職 -採用 -doda -mynavi -リクナビ -indeed -転職会議';
-      queries = queries.map(function(q) { return q + excludeTerms; });
+      queries.push(companyName + ' 本社所在地 住所 アクセス 連絡先 -求人 -転職');
 
-      Logger.logDebug('Executing targeted search for: ' + companyName, {
+      Logger.logDebug('Executing official-site-priority search for: ' + companyName, {
         phoneNumber: phoneNumber,
-        queryCount: queries.length
+        queryCount: queries.length,
+        strategy: 'official-site-first'
       });
 
       var allResults = [];
       var totalResponseTime = 0;
       var officialSiteFound = false;
+      var officialSiteUrl = '';
 
-      // 各クエリを実行
+      // 各クエリを実行（公式サイト優先戦略）
       for (var i = 0; i < queries.length; i++) {
         try {
           var requestPayload = Object.assign({
             api_key: apiKey,
             query: queries[i],
             search_depth: 'advanced',
-            max_results: 10,
+            max_results: i === 0 ? 8 : 6, // 公式サイト検索は多めに取得
             include_domains: [], // 信頼できるドメインがあれば追加
-            exclude_domains: ['doda.jp', 'mynavi.jp', 'rikunabi.com', 'indeed.com'] // 求人サイトを除外
+            exclude_domains: ['doda.jp', 'mynavi.jp', 'rikunabi.com', 'indeed.com', 'careercross.com'] // 求人サイトを除外
           }, searchOptions);
 
           var requestOptions = {
@@ -191,15 +189,41 @@ var TavilyClient = (function() {
               });
               
               if (!isDuplicate) {
-                // 公式サイトかどうかをチェック
-                if (result.url && (
-                  result.url.includes(companyName.toLowerCase().replace(/株式会社|有限会社/g, '')) ||
-                  result.title.includes('公式') ||
-                  result.title.includes('official')
-                )) {
-                  officialSiteFound = true;
-                  result.isOfficial = true;
+                // 公式サイトかどうかをより厳密にチェック
+                var isOfficial = false;
+                var companyNameClean = companyName.toLowerCase().replace(/株式会社|有限会社|合同会社|合資会社/g, '').trim();
+                
+                if (result.url && result.title) {
+                  var urlLower = result.url.toLowerCase();
+                  var titleLower = result.title.toLowerCase();
+                  
+                  // 公式サイト判定条件を強化
+                  isOfficial = (
+                    // URLに企業名が含まれる（.co.jp, .com, .jpドメイン）
+                    (urlLower.includes(companyNameClean) && (urlLower.includes('.co.jp') || urlLower.includes('.com') || urlLower.includes('.jp'))) ||
+                    // タイトルに「公式」「official」「ホームページ」が含まれる
+                    titleLower.includes('公式') ||
+                    titleLower.includes('official') ||
+                    titleLower.includes('ホームページ') ||
+                    // 企業の.co.jpドメインで会社概要ページ
+                    (urlLower.includes('.co.jp') && (urlLower.includes('company') || urlLower.includes('about') || urlLower.includes('profile')))
+                  );
                 }
+                
+                if (isOfficial) {
+                  officialSiteFound = true;
+                  officialSiteUrl = result.url;
+                  result.isOfficial = true;
+                  result.priority = 1; // 最高優先度
+                  Logger.logInfo('Official site found: ' + result.url + ' for ' + companyName);
+                } else {
+                  result.priority = i === 0 ? 2 : 3; // 公式サイト検索からの結果は優先度高め
+                }
+                
+                // ソースURL情報を明確に記録
+                result.sourceType = i === 0 ? 'official-search' : 'general-search';
+                result.queryIndex = i;
+                result.searchQuery = queries[i];
                 
                 allResults.push(result);
               }
@@ -208,26 +232,40 @@ var TavilyClient = (function() {
             totalResponseTime += formatted.response_time || 0;
           }
           
-          // 公式サイトが見つかったら、残りのクエリはスキップ
-          if (officialSiteFound && i < queries.length - 1) {
-            Logger.logInfo('Official site found, skipping remaining queries');
+          // 公式サイトが見つかった場合の早期終了戦略
+          if (officialSiteFound && i === 0) {
+            // 公式サイト検索で見つかった場合、基本情報検索のみ追加実行
+            Logger.logInfo('Official site found in first search, executing one more targeted search');
+            i = 1; // 次の検索（電話番号 or 基本情報）のみ実行
+            if (!phoneNumber) {
+              i = 2; // 電話番号がない場合は基本情報検索へ
+            }
+          } else if (officialSiteFound && i >= 2) {
+            // 2回目以降で公式サイトが見つかった場合は終了
+            Logger.logInfo('Official site found, terminating remaining searches for efficiency');
             break;
           }
           
           // レート制限対策
           if (i < queries.length - 1) {
-            Utilities.sleep(500);
+            Utilities.sleep(300); // 少し短縮
           }
         } catch (queryError) {
           Logger.logWarning('Search query failed: ' + queries[i], queryError);
         }
       }
 
-      // 結果を信頼性順にソート（公式サイトを優先）
+      // 結果を優先度と信頼性順にソート
       allResults.sort(function(a, b) {
+        // 1. 公式サイトを最優先
         if (a.isOfficial && !b.isOfficial) return -1;
         if (!a.isOfficial && b.isOfficial) return 1;
-        return 0;
+        
+        // 2. 優先度順
+        if (a.priority !== b.priority) return a.priority - b.priority;
+        
+        // 3. 検索クエリのインデックス順
+        return a.queryIndex - b.queryIndex;
       });
 
       var result = {
@@ -235,14 +273,18 @@ var TavilyClient = (function() {
         query: queries[0],
         results: allResults,
         response_time: totalResponseTime,
-        officialSiteFound: officialSiteFound
+        officialSiteFound: officialSiteFound,
+        officialSiteUrl: officialSiteUrl,
+        searchStrategy: 'official-site-priority'
       };
       
-      Logger.logInfo('Targeted search completed for: ' + companyName, {
+      Logger.logInfo('Official-site-priority search completed for: ' + companyName, {
         resultCount: result.results.length,
         responseTime: result.response_time,
         officialSiteFound: officialSiteFound,
-        queriesExecuted: queries.length
+        officialSiteUrl: officialSiteUrl,
+        queriesExecuted: i + 1,
+        strategy: 'official-site-first'
       });
       
       return result;
@@ -465,14 +507,26 @@ var TavilyClient = (function() {
                 // 採用情報のカテゴリを設定
                 result.category = 'recruitment';
                 
-                // 公式採用ページかどうかをチェック
-                if (result.url && (
-                  result.url.includes('career') ||
-                  result.url.includes('recruit') ||
-                  result.url.includes('採用')
-                )) {
-                  result.isOfficialRecruitment = true;
+                // 公式採用ページかどうかをチェック（企業ドメインベースで厳密に判定）
+                var isOfficialRecruitment = false;
+                if (result.url) {
+                  var urlLower = result.url.toLowerCase();
+                  var companyNameClean = companyName.toLowerCase().replace(/株式会社|有限会社|合同会社|合資会社/g, '').trim();
+                  
+                  // 企業の公式ドメインかどうかを厳密にチェック
+                  isOfficialRecruitment = (
+                    // 企業名が含まれるドメインで採用関連ページ (.co.jp, .com, .jp)
+                    (urlLower.includes(companyNameClean) && 
+                     (urlLower.includes('.co.jp') || urlLower.includes('.com') || urlLower.includes('.jp')) &&
+                     (urlLower.includes('career') || urlLower.includes('recruit') || urlLower.includes('採用'))) ||
+                    // 企業の.co.jpドメインで採用ページ
+                    (urlLower.includes('.co.jp') && 
+                     urlLower.includes(companyNameClean) &&
+                     (urlLower.includes('career') || urlLower.includes('recruit') || urlLower.includes('採用')))
+                  );
                 }
+                
+                result.isOfficialRecruitment = isOfficialRecruitment;
                 
                 allResults.push(result);
               }

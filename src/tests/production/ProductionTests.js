@@ -487,31 +487,31 @@ var ProductionTests = (function() {
                 console.log('❌ データ保存エラー:', saveError.message);
               }
               
-                              processedResults.push({
+              processedResults.push({
                   success: saveSuccess,
-                  rowIndex: company.rowIndex,
+                rowIndex: company.rowIndex,
                   companyName: company.name,
                   company: result.company,
                   branches: result.branches,
                   newsSummary: result.newsSummary,
                   recruitmentSummary: result.recruitmentSummary,
                   saveError: saveSuccess ? null : saveError.message
-                });
-              } else {
-                processedResults.push({
-                  success: false,
-                  rowIndex: company.rowIndex,
-                  companyName: company.name,
-                  error: result.error
-                });
-              }
-            } catch (error) {
+              });
+            } else {
               processedResults.push({
                 success: false,
                 rowIndex: company.rowIndex,
-                companyName: company.name,
-                error: error.toString()
+                  companyName: company.name,
+                error: result.error
               });
+            }
+          } catch (error) {
+            processedResults.push({
+              success: false,
+              rowIndex: company.rowIndex,
+                companyName: company.name,
+              error: error.toString()
+            });
           }
         }
         
@@ -933,7 +933,7 @@ var ProductionTests = (function() {
 
     console.log('\n================================');
   }
-
+  
   // BatchProcessor用のヘルパー関数（同期版）
   function processSpecificCompanies(companyNames) {
     var results = [];
@@ -972,6 +972,158 @@ var ProductionTests = (function() {
     return results;
   }
   
+  /**
+   * 修正版：公式サイト判定とソースURL表示のテスト
+   */
+  function testRevisedOfficialSiteDetection() {
+    console.log('\n=== 修正版：公式サイト判定とソースURL表示テスト ===');
+    
+    // テスト対象企業（公式サイトが明確な企業）
+    var testCompany = {
+      companyName: 'エムスリーヘルスデザイン株式会社',
+      phoneNumber: '03-6684-4261'
+    };
+    
+    try {
+      console.log('テスト企業:', testCompany.companyName);
+      console.log('電話番号:', testCompany.phoneNumber);
+      console.log('開始時刻:', new Date().toLocaleString());
+      
+      // 企業調査実行
+      var startTime = Date.now();
+      var result = CompanyResearchService.researchCompany(testCompany.companyName, testCompany.phoneNumber);
+      var duration = Date.now() - startTime;
+      
+      if (result.success) {
+        console.log('\n✅ 調査成功');
+        console.log('処理時間:', Math.round(duration / 1000) + '秒');
+        
+        var company = result.data;
+        
+        // 基本情報表示
+        console.log('\n=== 基本情報 ===');
+        console.log('企業名:', company.companyName);
+        console.log('正式名称:', company.officialName);
+        console.log('電話番号:', company.phone);
+        console.log('信頼性スコア:', company.reliabilityScore);
+        
+        // ソースURL情報表示
+        console.log('\n=== ソースURL情報 ===');
+        console.log('公式サイトURL:', company.officialSiteUrl || '検出されませんでした');
+        console.log('主要ソースURL:', company.primarySourceUrl || '設定されませんでした');
+        console.log('全ソースURL数:', company.sourceUrls ? company.sourceUrls.length : 0);
+        
+        if (company.sourceUrls && company.sourceUrls.length > 0) {
+          console.log('ソースURL一覧:');
+          company.sourceUrls.slice(0, 5).forEach(function(url, index) {
+            var isOfficial = url === company.officialSiteUrl ? ' [公式]' : '';
+            console.log('  ' + (index + 1) + '. ' + url + isOfficial);
+          });
+        }
+        
+        // 最新ニュースサマリー表示
+        console.log('\n=== 最新ニュースサマリー ===');
+        if (company.latestNews) {
+          console.log(company.latestNews);
+          
+          // 参照URLが含まれているかチェック
+          if (company.latestNews.includes('【参照URL】')) {
+            console.log('✅ 参照URL情報が含まれています');
+          } else {
+            console.log('❌ 参照URL情報が含まれていません');
+          }
+          
+          // 公式サイトが優先されているかチェック
+          if (company.latestNews.includes('[公式]')) {
+            console.log('✅ 公式サイトが優先表示されています');
+          } else {
+            console.log('⚠️ 公式サイトの優先表示がありません');
+          }
+        } else {
+          console.log('最新ニュース情報は取得されませんでした');
+        }
+        
+        // 採用情報サマリー表示
+        console.log('\n=== 採用情報サマリー ===');
+        if (company.recruitmentStatus) {
+          console.log(company.recruitmentStatus);
+          
+          // 参照URLが含まれているかチェック
+          if (company.recruitmentStatus.includes('【参照URL】')) {
+            console.log('✅ 参照URL情報が含まれています');
+          } else {
+            console.log('❌ 参照URL情報が含まれていません');
+          }
+          
+          // 公式採用ページが適切に判定されているかチェック
+          if (company.recruitmentStatus.includes('[公式]')) {
+            console.log('✅ 公式採用ページが適切に判定されています');
+          } else {
+            console.log('⚠️ 公式採用ページの判定がありません（企業ドメインの採用ページがない可能性）');
+          }
+        } else {
+          console.log('採用情報は取得されませんでした');
+        }
+        
+        // スプレッドシート行データの確認
+        console.log('\n=== スプレッドシート出力確認 ===');
+        var companyObj = new Company(company);
+        var rowData = companyObj.toHeadquartersSpreadsheetRow();
+        
+        console.log('基本情報ソースURL（25列目）:', rowData[24] || '空欄');
+        console.log('最新ニュース（18列目）:', (rowData[17] || '').substring(0, 150) + '...');
+        console.log('採用状況（19列目）:', (rowData[18] || '').substring(0, 150) + '...');
+        
+        // 分離確認
+        var basicInfoUrls = rowData[24] || '';
+        var newsUrls = (rowData[17] || '').includes('【参照URL】');
+        var recruitmentUrls = (rowData[18] || '').includes('【参照URL】');
+        
+        console.log('\n=== ソースURL分離確認 ===');
+        console.log('✅ 25列目（基本情報）:', basicInfoUrls ? '設定済み' : '未設定');
+        console.log('✅ 18列目（ニュース）:', newsUrls ? 'ソースURL含む' : 'ソースURL未含');
+        console.log('✅ 19列目（採用）:', recruitmentUrls ? 'ソースURL含む' : 'ソースURL未含');
+        
+        // 基本情報のソースURL詳細表示
+        if (basicInfoUrls) {
+          console.log('\n基本情報で使用したソースURL:');
+          console.log(basicInfoUrls);
+          
+          if (basicInfoUrls.includes('[公式]')) {
+            console.log('✅ 公式サイトが基本情報ソースに含まれています');
+          } else {
+            console.log('⚠️ 公式サイトが基本情報ソースに含まれていません');
+          }
+        }
+        
+        return {
+          success: true,
+          duration: duration,
+          company: company,
+          officialSiteDetected: !!company.officialSiteUrl,
+          newsWithUrls: !!(company.latestNews && company.latestNews.includes('【参照URL】')),
+          recruitmentWithUrls: !!(company.recruitmentStatus && company.recruitmentStatus.includes('【参照URL】'))
+        };
+        
+      } else {
+        console.log('❌ 調査失敗');
+        console.log('エラー:', result.error || 'Unknown error');
+        
+        return {
+          success: false,
+          error: result.error
+        };
+      }
+      
+    } catch (error) {
+      console.error('❌ テストエラー:', error.toString());
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  }
+  
   // Public API
   return {
     checkApiConfiguration: checkApiConfiguration,
@@ -980,7 +1132,8 @@ var ProductionTests = (function() {
     testSmallBatchProcessing: testSmallBatchProcessing,
     testRealSpreadsheetProcessing: testRealSpreadsheetProcessing,
     runProductionTests: runProductionTests,
-    processSpecificCompanies: processSpecificCompanies
+    processSpecificCompanies: processSpecificCompanies,
+    testRevisedOfficialSiteDetection: testRevisedOfficialSiteDetection
   };
 })();
 

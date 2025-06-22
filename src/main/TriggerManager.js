@@ -254,38 +254,38 @@ var TriggerManager = (function() {
     try {
       if (getProcessStatus('systemMaintenance')) {
         Logger.logWarning('System maintenance is already running');
-        return {
+  return {
           success: false,
           error: 'System maintenance is already running'
         };
-      }
+    }
       
       setProcessStatus('systemMaintenance', true);
       Logger.logInfo('Starting manual system maintenance');
-      
-      // Clear old cache entries
-      if (typeof ApiBase !== 'undefined') {
-        ApiBase.clearCache();
-      }
-      
-      // Clear configuration cache
-      if (typeof ConfigManager !== 'undefined') {
-        ConfigManager.clearCache();
-      }
-      
+    
+    // Clear old cache entries
+    if (typeof ApiBase !== 'undefined') {
+      ApiBase.clearCache();
+    }
+    
+    // Clear configuration cache
+    if (typeof ConfigManager !== 'undefined') {
+      ConfigManager.clearCache();
+    }
+    
       // Clear script cache
       CacheService.getScriptCache().removeAll([]);
       
       setProcessStatus('systemMaintenance', false);
-      Logger.logInfo('System maintenance completed');
+    Logger.logInfo('System maintenance completed');
       
       return {
         success: true,
         message: 'System maintenance completed successfully'
       };
       
-    } catch (error) {
-      Logger.logError('Error in system maintenance', error);
+  } catch (error) {
+    Logger.logError('Error in system maintenance', error);
       setProcessStatus('systemMaintenance', false);
       
       return {
@@ -299,41 +299,41 @@ var TriggerManager = (function() {
    * Execute error monitoring manually
    */
   function executeErrorMonitoring() {
-    try {
+  try {
       if (getProcessStatus('errorMonitoring')) {
         Logger.logWarning('Error monitoring is already running');
         return {
           success: false,
           error: 'Error monitoring is already running'
         };
-      }
+  }
       
       setProcessStatus('errorMonitoring', true);
       Logger.logInfo('Starting manual error monitoring');
       
       var result = { hasAlerts: false, alerts: [] };
-      
-      if (typeof ErrorHandler !== 'undefined') {
-        var monitoring = ErrorHandler.monitorCriticalErrors();
+    
+    if (typeof ErrorHandler !== 'undefined') {
+      var monitoring = ErrorHandler.monitorCriticalErrors();
         result = monitoring;
+      
+      if (monitoring.hasAlerts) {
+        Logger.logWarning('Critical errors detected', monitoring);
         
-        if (monitoring.hasAlerts) {
-          Logger.logWarning('Critical errors detected', monitoring);
+        var email = ConfigManager.get('NOTIFICATION_EMAIL');
+        if (email) {
+          var alertMessages = monitoring.alerts.map(function(alert) {
+            return '- ' + alert.level + ': ' + alert.message + ' (' + alert.action + ')';
+          }).join('\n');
           
-          var email = ConfigManager.get('NOTIFICATION_EMAIL');
-          if (email) {
-            var alertMessages = monitoring.alerts.map(function(alert) {
-              return '- ' + alert.level + ': ' + alert.message + ' (' + alert.action + ')';
-            }).join('\n');
-            
-            MailApp.sendEmail(
-              email,
-              '[Corporate Research] Critical Error Alert',
-              'Critical errors detected in the system:\n\n' + alertMessages
-            );
-          }
+          MailApp.sendEmail(
+            email,
+            '[Corporate Research] Critical Error Alert',
+            'Critical errors detected in the system:\n\n' + alertMessages
+          );
         }
       }
+    }
       
       setProcessStatus('errorMonitoring', false);
       Logger.logInfo('Error monitoring completed');
@@ -345,22 +345,22 @@ var TriggerManager = (function() {
         alerts: result.alerts || []
       };
       
-    } catch (error) {
-      Logger.logError('Error in error monitoring', error);
+  } catch (error) {
+    Logger.logError('Error in error monitoring', error);
       setProcessStatus('errorMonitoring', false);
       
       return {
         success: false,
         error: error.message
       };
-    }
   }
+}
 
   /**
    * Execute performance check manually
    */
-  function executePerformanceCheck() {
-    try {
+function executePerformanceCheck() {
+  try {
       if (getProcessStatus('performanceCheck')) {
         Logger.logWarning('Performance check is already running');
         return {
@@ -371,27 +371,27 @@ var TriggerManager = (function() {
       
       setProcessStatus('performanceCheck', true);
       Logger.logInfo('Starting manual performance check');
-      
-      // Check API statistics
-      var stats = {
-        timestamp: new Date(),
-        components: {}
-      };
-      
-      if (typeof TavilyClient !== 'undefined') {
-        stats.components.tavily = TavilyClient.getApiStats();
-      }
-      
-      if (typeof OpenAIClient !== 'undefined') {
-        stats.components.openai = OpenAIClient.getApiStats();
-      }
-      
-      if (typeof CompanyResearchService !== 'undefined') {
-        stats.components.research = CompanyResearchService.getResearchStats();
-      }
-      
+    
+    // Check API statistics
+    var stats = {
+      timestamp: new Date(),
+      components: {}
+    };
+    
+    if (typeof TavilyClient !== 'undefined') {
+      stats.components.tavily = TavilyClient.getApiStats();
+    }
+    
+    if (typeof OpenAIClient !== 'undefined') {
+      stats.components.openai = OpenAIClient.getApiStats();
+    }
+    
+    if (typeof CompanyResearchService !== 'undefined') {
+      stats.components.research = CompanyResearchService.getResearchStats();
+    }
+    
       setProcessStatus('performanceCheck', false);
-      Logger.logInfo('Performance check completed', stats);
+    Logger.logInfo('Performance check completed', stats);
       
       return {
         success: true,
@@ -594,4 +594,4 @@ function setupAllTriggersWithMonitoring() {
     success: false,
     error: 'Automatic triggers are disabled. Use manual control functions.'
   };
-} 
+}

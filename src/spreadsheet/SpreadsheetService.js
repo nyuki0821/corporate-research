@@ -249,17 +249,17 @@ var SpreadsheetService = (function() {
    */
   function initializeSpreadsheet() {
     try {
-      // スプレッドシートが存在しない場合は新規作成
-      if (!_spreadsheet) {
-        _spreadsheet = getTargetSpreadsheet();
-        Logger.logInfo('スプレッドシートを取得しました');
-      }
+    // スプレッドシートが存在しない場合は新規作成
+    if (!_spreadsheet) {
+      _spreadsheet = getTargetSpreadsheet();
+      Logger.logInfo('スプレッドシートを取得しました');
+    }
       
       if (!_spreadsheet) {
         throw new Error('スプレッドシートの初期化に失敗しました');
       }
       
-      return _spreadsheet;
+    return _spreadsheet;
     } catch (error) {
       Logger.logError('Failed to initialize spreadsheet', error);
       throw error;
@@ -309,13 +309,13 @@ var SpreadsheetService = (function() {
     }
     
     try {
-      return {
-        id: _spreadsheet.getId(),
-        name: _spreadsheet.getName(),
-        url: _spreadsheet.getUrl(),
+    return {
+      id: _spreadsheet.getId(),
+      name: _spreadsheet.getName(),
+      url: _spreadsheet.getUrl(),
         lastModified: new Date(), // getLastUpdated()は存在しないため現在時刻を使用
-        owner: _spreadsheet.getOwner() ? _spreadsheet.getOwner().getEmail() : 'Unknown'
-      };
+      owner: _spreadsheet.getOwner() ? _spreadsheet.getOwner().getEmail() : 'Unknown'
+    };
     } catch (error) {
       Logger.logError('Failed to get spreadsheet info', error);
       return {
@@ -459,18 +459,18 @@ var SpreadsheetService = (function() {
    */
   function updateCompanyStatus(rowIndex, status, error) {
     try {
-      if (!error) error = '';
+    if (!error) error = '';
       
       // スプレッドシートが初期化されていない場合は初期化
       if (!_spreadsheet) {
         _spreadsheet = getTargetSpreadsheet();
       }
-      
-      var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.COMPANY_LIST || '企業リスト');
+    
+    var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.COMPANY_LIST || '企業リスト');
       if (!sheet) return false;
 
-      var range = sheet.getRange(rowIndex, 3, 1, 3);
-      range.setValues([[status, new Date(), error]]);
+    var range = sheet.getRange(rowIndex, 3, 1, 3);
+    range.setValues([[status, new Date(), error]]);
       return true;
     } catch (err) {
       Logger.logError('Failed to update company status', err);

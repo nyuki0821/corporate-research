@@ -137,7 +137,7 @@ var BatchProcessor = (function() {
           if (result.success) {
             // トランザクション的な保存処理
             try {
-              if (typeof SpreadsheetService !== 'undefined') {
+            if (typeof SpreadsheetService !== 'undefined') {
                 // 1. まず処理中ステータスに更新（既に処理中の場合はスキップ）
                 var currentStatus = SpreadsheetService.getCompanyStatus(company.rowIndex);
                 if (currentStatus !== '処理中') {
@@ -211,20 +211,20 @@ var BatchProcessor = (function() {
                 
                 // 3. 保存結果に応じてステータスを更新
                 if (saveSuccess) {
-                  SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了', '');
+              SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了', '');
                   Logger.logInfo('Company data saved successfully: ' + company.name);
                 } else {
                   SpreadsheetService.updateCompanyStatus(company.rowIndex, 'エラー', 'データ保存失敗: ' + saveError.message);
                   throw saveError;
-                }
               }
-              
-              updateStats(true);
-              resolve({
-                success: true,
-                company: company,
-                data: result
-              });
+            }
+            
+            updateStats(true);
+            resolve({
+              success: true,
+              company: company,
+              data: result
+            });
               
             } catch (saveError) {
               Logger.logError('Failed to save company data: ' + company.name, saveError);

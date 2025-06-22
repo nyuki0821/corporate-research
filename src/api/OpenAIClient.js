@@ -147,36 +147,61 @@ var OpenAIClient = (function() {
     try {
       Logger.logDebug('Extracting company info with OpenAI: ' + companyName);
 
-      // Build context from search results with basic length limiting
+      // Build context from search results with strict length limiting
       var context = '';
+      var MAX_CONTEXT_LENGTH = 75000; // より厳格な制限（約90,000トークン相当）
+      var sourceUrls = []; // ソースURL記録用
+      var officialSiteUrl = ''; // 公式サイトURL
       
       // searchResultsが文字列の場合（buildSearchContextで既に処理済み）
       if (typeof searchResults === 'string') {
         context = searchResults;
-        Logger.logInfo('Using pre-built context string', {
-          contextLength: context.length
-        });
-      } 
+        
+        // コンテキスト長の二重チェック
+        if (context.length > MAX_CONTEXT_LENGTH) {
+          Logger.logWarning('Context too long, truncating: ' + companyName, {
+            originalLength: context.length,
+            maxLength: MAX_CONTEXT_LENGTH
+          });
+          context = context.substring(0, MAX_CONTEXT_LENGTH) + '\n\n[コンテンツ制限により省略]';
+        }
+      }
       // searchResultsがオブジェクトの場合（後方互換性のため）
       else if (searchResults && searchResults.results) {
-        var maxContextLength = 80000; // 約100,000トークン相当（安全マージン）
         var currentLength = 0;
         var processedResults = [];
+        
+        // 公式サイトURLを特定
+        var officialSite = searchResults.results.find(function(r) { return r.isOfficial; });
+        if (officialSite) {
+          officialSiteUrl = officialSite.url;
+        }
         
         for (var i = 0; i < searchResults.results.length; i++) {
           var result = searchResults.results[i];
           var content = result.content || '';
+          var url = result.url || '';
           
-          // 各結果の最大長を制限
-          var maxResultLength = 10000; // 1つの結果あたりの最大長
-          if (content.length > maxResultLength) {
-            content = content.substring(0, maxResultLength);
+          // ソースURLを記録（重複除去）
+          if (url && sourceUrls.indexOf(url) === -1) {
+            sourceUrls.push(url);
           }
           
-          var resultText = 'タイトル: ' + (result.title || '') + '\nURL: ' + (result.url || '') + '\n内容: ' + content;
+          // 各結果の最大長を制限
+          var maxResultLength = 8000; // より厳格な制限
+          if (content.length > maxResultLength) {
+            content = content.substring(0, maxResultLength) + '...[省略]';
+          }
+          
+          var siteType = result.isOfficial ? '[公式サイト] ' : '';
+          var resultText = '=== 検索結果 ' + (i + 1) + ' ' + siteType + '===\n' +
+                          'タイトル: ' + (result.title || '') + '\n' +
+                          'URL: ' + url + '\n' +
+                          '内容: ' + content + '\n';
           
           // コンテキスト長制限チェック
-          if (currentLength + resultText.length > maxContextLength) {
+          if (currentLength + resultText.length > MAX_CONTEXT_LENGTH) {
+            Logger.logInfo('Context length limit reached, stopping at result ' + (i + 1));
             break;
           }
           
@@ -184,200 +209,148 @@ var OpenAIClient = (function() {
           currentLength += resultText.length;
         }
         
-        context = processedResults.join('\n\n');
+        context = processedResults.join('\n');
         
         Logger.logInfo('コンテンツ制限適用: ' + companyName, {
           originalResults: searchResults.results.length,
           processedResults: processedResults.length,
-          contextLength: context.length
+          contextLength: context.length,
+          maxAllowed: MAX_CONTEXT_LENGTH,
+          sourceUrlCount: sourceUrls.length,
+          officialSiteFound: !!officialSiteUrl
         });
       }
       
-      // コンテキストが空の場合の警告
+      // 最終的なコンテキスト長チェック
       if (!context || context.trim().length === 0) {
         Logger.logWarning('Empty context for company: ' + companyName);
         throw new Error('No search context available for analysis');
       }
+      
+      if (context.length > MAX_CONTEXT_LENGTH) {
+        Logger.logWarning('Final context still too long, emergency truncation: ' + companyName);
+        context = context.substring(0, MAX_CONTEXT_LENGTH) + '\n\n[緊急省略]';
+      }
 
+      // 推定トークン数を計算（1トークン ≈ 1.3文字で概算）
+      var estimatedTokens = Math.ceil(context.length / 1.3);
+      var maxTokens = 128000; // OpenAI GPT-4の制限
+      var responseTokens = 3000; // レスポンス用トークン
+      var availableTokens = maxTokens - responseTokens;
+      
+      Logger.logInfo('OpenAI request token estimation: ' + companyName, {
+        contextLength: context.length,
+        estimatedTokens: estimatedTokens,
+        maxTokens: maxTokens,
+        availableTokens: availableTokens,
+        withinLimit: estimatedTokens <= availableTokens
+      });
+
+      if (estimatedTokens > availableTokens) {
+        Logger.logWarning('Estimated tokens exceed limit, truncating context: ' + companyName);
+        var safeLength = Math.floor(availableTokens * 1.3);
+        context = context.substring(0, safeLength) + '\n\n[トークン制限により省略]';
+      }
+
+      // OpenAI APIに送信するプロンプト（ソースURL記録を含む）
       var systemPrompt = 
-        'あなたは企業情報抽出の専門家です。検索結果から企業の基本情報を抽出してください。\n\n' +
-        '**最重要タスク**: 検索結果を詳細に読み、利用可能なすべての企業情報を抽出すること。\n\n' +
-        '**抽出手順**:\n' +
-        '1. 各検索結果を順番に読む\n' +
-        '2. 企業情報に関連するキーワードを探す\n' +
-        '3. 見つけた情報を該当するフィールドに記入\n' +
-        '4. 複数の情報源で確認できた情報は信頼性が高い\n\n' +
-        '**具体的な抽出パターン**:\n' +
-        '【住所情報】\n' +
-        '- "本社住所：京都府京都市中京区..." → prefecture: "京都府", city: "京都市中京区"\n' +
-        '- "所在地：東京都渋谷区..." → prefecture: "東京都", city: "渋谷区"\n' +
-        '- "〒150-0001 東京都..." → postalCode: "150-0001", prefecture: "東京都"\n\n' +
-        '【企業基本情報】\n' +
-        '- "設立：2010年4月" → establishedYear: 2010\n' +
-        '- "創業2015年" → establishedYear: 2015\n' +
-        '- "資本金：1,000万円" → capital: "1,000万円"\n' +
-        '- "資本金1億円" → capital: "1億円"\n' +
-        '- "従業員数：50名" → employees: 50\n' +
-        '- "社員数100人" → employees: 100\n\n' +
-        '【事業内容】\n' +
-        '- "事業内容：健康診断やストレスチェック..." → industryLarge: "医療・福祉", industryMedium: "健康管理サービス"\n' +
-        '- "営業支援・営業代行サービス" → industryLarge: "サービス業", industryMedium: "営業支援サービス"\n' +
-        '- "ソフトウェア開発" → industryLarge: "情報通信業", industryMedium: "ソフトウェア業"\n\n' +
-        '【代表者情報】\n' +
-        '- "代表取締役社長：山田太郎" → representativeName: "山田太郎", representativeTitle: "代表取締役社長"\n' +
-        '- "CEO 田中花子" → representativeName: "田中花子", representativeTitle: "CEO"\n\n' +
-        '**電話番号からの地域推測ルール**:\n' +
-        '- 03: 東京都\n' +
-        '- 06: 大阪府\n' +
-        '- 052: 愛知県名古屋市\n' +
-        '- 045: 神奈川県横浜市\n' +
-        '- 075: 京都府京都市\n' +
-        '- 092: 福岡県福岡市\n' +
-        '- 011: 北海道札幌市\n' +
-        '- 022: 宮城県仙台市\n' +
-        '- 050: IP電話（地域不明）\n' +
-        '- 070/080/090: 携帯電話（地域不明）\n\n' +
+        'あなたは企業情報抽出の専門家です。検索結果から企業の正確な情報を抽出し、JSON形式で回答してください。\n\n' +
         '**重要な抽出ルール**:\n' +
-        '1. 検索結果に記載されているすべての情報を見逃さない\n' +
-        '2. 求人サイトの情報も企業情報源として活用（給与情報は除く）\n' +
-        '3. 電話番号から都道府県を推測（075→京都府、050→地域不明）\n' +
-        '4. 事業内容から業種を判断\n' +
-        '5. 空欄を恐れず、見つからない情報は空文字にする\n\n' +
-        '抽出するJSONフィールド:\n' +
-        '【基本情報】\n' +
-        '- companyName: 企業名（「株式会社」「有限会社」などを含む正式名称）\n' +
-        '- officialName: 正式企業名（英語名がある場合は日本語名を優先）\n' +
-        '- phone: 電話番号（ハイフンありの形式で、例: 03-1234-5678）\n' +
-        '- industryLarge: 業種大分類（「製造業」「サービス業」「建設業」「情報通信業」など）\n' +
-        '- industryMedium: 業種中分類（より具体的な業種）\n' +
-        '- employees: 従業員数（数値のみ、例: 1000、不明な場合は推測値でも可）\n' +
-        '- establishedYear: 設立年（西暦年、例: 1950、不明な場合は推測値でも可）\n' +
-        '- capital: 資本金（「100億円」「1,000万円」など単位を含む、不明な場合は「非公開」）\n' +
-        '- listingStatus: 上場区分（「東証プライム」「東証スタンダード」「非上場」など、不明な場合は「非上場」と推測）\n' +
-        '- postalCode: 本社郵便番号（「123-4567」形式、電話番号から推測可能な場合は推測）\n' +
-        '- prefecture: 本社都道府県（電話番号の市外局番から推測可能）\n' +
-        '- city: 本社市区町村（電話番号から推測可能な場合は推測）\n' +
-        '- addressDetail: 本社住所詳細（番地、ビル名、階数など）\n' +
-        '- representativeName: 代表者名（社長、CEO、代表取締役の氏名）\n' +
-        '- representativeTitle: 代表者役職（「代表取締役社長」「CEO」など、不明な場合は「代表取締役」と推測）\n' +
-        '- philosophy: 企業理念（企業理念、ミッション、ビジョン、経営方針など）\n' +
-        '- latestNews: 最新ニュース（最近のプレスリリース、発表、ニュースなど）\n' +
-        '- recruitmentStatus: 採用状況（「新卒採用実施中」「中途採用あり」「通年採用」など、不明な場合は「不明」）\n' +
-        '- website: 企業URL（公式ホームページのURL）\n' +
-        '- reliabilityScore: 信頼性スコア（1-100、情報の完全性と信頼性に基づく）\n\n' +
-        '【支店情報】- 最重要項目\n' +
-        '- branches: 支店情報の配列（**検索結果に支店情報があれば絶対に空配列にしないでください**）\n\n' +
-        '**フィールド記入ルール**:\n' +
-        '1. 明確に記載されている情報 → 積極的に抽出して記入\n' +
-        '2. 文脈から合理的に判断できる情報 → 抽出して記入\n' +
-        '3. 電話番号から都道府県が特定できる場合 → prefecture に記入\n' +
-        '4. 業界・業種が明確な場合 → industryLarge/industryMedium に記入\n' +
-        '5. 上場区分の記載がない場合 → 「非上場」と記入\n' +
-        '6. 曖昧な情報や推測 → 空文字("")またはnull\n\n' +
-        '**抽出の重要なルール**:\n' +
-        '- 検索結果に記載されている情報は積極的に抽出\n' +
-        '- 文脈から合理的に判断できる情報も抽出\n' +
-        '- 電話番号は必ずハイフン区切りで統一\n' +
-        '- 根拠のない推測は避ける\n' +
-        '- 信頼性スコアは抽出できた情報の量と質に基づいて設定（多くの情報を抽出できた場合は高く）\n\n' +
-        '回答例（バランス重視）:\n' +
-        '{"companyName":"株式会社サンプル","officialName":"株式会社サンプル","phone":"03-1234-5678","industryLarge":"情報通信業","industryMedium":"ソフトウェア業","employees":50,"establishedYear":2010,"capital":"1,000万円","listingStatus":"非上場","postalCode":"150-0001","prefecture":"東京都","city":"渋谷区","addressDetail":"渋谷1-1-1","representativeName":"山田太郎","representativeTitle":"代表取締役","philosophy":"","latestNews":"","recruitmentStatus":"","website":"https://sample.co.jp","reliabilityScore":75,"branches":[]}';
+        '1. 公式サイトの情報を最優先で使用してください\n' +
+        '2. 情報が見つからない場合は null を返してください\n' +
+        '3. 推測や憶測は避け、明確に記載されている情報のみ抽出してください\n' +
+        '4. 数値は単位付きの文字列として抽出してください\n' +
+        '5. 住所は都道府県、市区町村、詳細住所に分割してください\n' +
+        '6. 代表者情報は最新のものを優先してください\n\n' +
+        '**JSON形式で以下のフィールドを抽出**:\n' +
+        '{\n' +
+        '  "companyName": "企業名（正規化済み）",\n' +
+        '  "officialName": "正式企業名（登記名称）",\n' +
+        '  "phone": "電話番号",\n' +
+        '  "industryLarge": "業種大分類",\n' +
+        '  "industryMedium": "業種中分類",\n' +
+        '  "employees": "従業員数（単位含む）",\n' +
+        '  "establishedYear": "設立年",\n' +
+        '  "capital": "資本金（単位含む）",\n' +
+        '  "listingStatus": "上場区分",\n' +
+        '  "postalCode": "郵便番号",\n' +
+        '  "prefecture": "都道府県",\n' +
+        '  "city": "市区町村",\n' +
+        '  "addressDetail": "住所詳細",\n' +
+        '  "representativeName": "代表者名",\n' +
+        '  "representativeTitle": "代表者役職",\n' +
+        '  "philosophy": "企業理念・ミッション",\n' +
+        '  "website": "公式ウェブサイトURL",\n' +
+        '  "reliabilityScore": 85\n' +
+        '}';
 
-              var userPrompt = '企業名: ' + companyName + '\n' +
-          (phoneNumber ? '参考電話番号: ' + phoneNumber + '\n' : '') + '\n' +
-          '検索結果:\n' + context + '\n\n' +
-          '上記の検索結果を詳細に読み、企業の基本情報をJSONで抽出してください。\n\n' +
-          '**抽出指示**:\n' +
-          '1. 各検索結果を丁寧に読み、企業情報を探してください\n' +
-          '2. 例えば「本社住所：京都府京都市中京区」という記載があれば、prefecture: "京都府", city: "京都市中京区"として抽出\n' +
-          '3. 「事業内容：健康診断やストレスチェック」という記載があれば、industryLarge: "医療・福祉"として抽出\n' +
-          '4. 検索結果に明確に記載されている情報はすべて抽出してください\n' +
-          '5. 見つからない情報は空文字("")またはnullにしてください';
+      var userPrompt = '企業名: ' + companyName + '\n';
+      if (phoneNumber) {
+        userPrompt += '電話番号: ' + phoneNumber + '\n';
+      }
+      userPrompt += '\n検索結果:\n' + context;
 
-      var messages = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ];
-
-      var requestData = buildChatRequest(messages, {
+      var requestBody = {
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        max_tokens: responseTokens,
         temperature: 0.1,
-        max_tokens: 4000,
-        model: 'gpt-4o'  // より強力なモデルに変更
+        response_format: { type: 'json_object' }
+      };
+
+      Logger.logDebug('Sending request to OpenAI API for: ' + companyName);
+
+      var response = ApiBase.post(_baseUrl + '/chat/completions', requestBody, {
+        headers: {
+          'Authorization': 'Bearer ' + getApiKey(),
+          'Content-Type': 'application/json'
+        },
+        timeout: ConfigManager.getNumber('OPENAI_TIMEOUT_MS', 60000),
+        useCache: false
       });
 
-      Logger.logDebug('Sending OpenAI request for: ' + companyName);
+      Logger.logDebug('Received response from OpenAI API for: ' + companyName);
 
-      var response = ApiBase.post(_baseUrl + '/chat/completions', requestData, {
-        headers: buildHeaders(),
-        timeout: ConfigManager.getNumber('EXTRACTION_TIMEOUT_MS', 60000)
-      });
-
-      if (!response || !response.choices || response.choices.length === 0) {
-        throw new Error('Invalid OpenAI response structure');
+      if (!response.choices || response.choices.length === 0) {
+        throw new Error('No response from OpenAI API');
       }
 
       var content = response.choices[0].message.content;
-      Logger.logDebug('OpenAI response received for: ' + companyName);
-      
-      // レスポンス内容を詳細にログ出力
-      Logger.logDebug('Raw OpenAI response content', {
-        companyName: companyName,
-        responseLength: response.choices[0].message.content.length,
-        responsePreview: response.choices[0].message.content.substring(0, 500) + '...'
+      var parsedData = parseCompanyInfo(content, companyName);
+
+      if (!parsedData) {
+        throw new Error('Failed to parse company information');
+      }
+
+      // ソースURL情報を追加
+      parsedData.sourceUrls = sourceUrls;
+      parsedData.officialSiteUrl = officialSiteUrl;
+      parsedData.primarySourceUrl = officialSiteUrl || (sourceUrls.length > 0 ? sourceUrls[0] : '');
+
+      Logger.logInfo('Company info extraction completed: ' + companyName, {
+        extractedFields: Object.keys(parsedData).length,
+        reliabilityScore: parsedData.reliabilityScore,
+        sourceUrlCount: sourceUrls.length,
+        officialSiteFound: !!officialSiteUrl,
+        primarySource: parsedData.primarySourceUrl
       });
 
-      var extractedData = parseCompanyInfo(content);
-      
-      if (extractedData) {
-        Logger.logInfo('Company info extraction successful: ' + companyName, {
-          fieldsExtracted: Object.keys(extractedData).length,
-          hasPhone: !!extractedData.phone,
-          hasBranches: extractedData.branches && extractedData.branches.length > 0,
-          branchCount: extractedData.branches ? extractedData.branches.length : 0
-        });
-
-        // 抽出されたデータの詳細をログ出力
-        Logger.logDebug('Detailed extracted data for: ' + companyName, {
-          companyName: extractedData.companyName,
-          phone: extractedData.phone,
-          industryLarge: extractedData.industryLarge,
-          industryMedium: extractedData.industryMedium,
-          employees: extractedData.employees,
-          establishedYear: extractedData.establishedYear,
-          capital: extractedData.capital,
-          prefecture: extractedData.prefecture,
-          city: extractedData.city,
-          representativeName: extractedData.representativeName,
-          reliabilityScore: extractedData.reliabilityScore
-        });
-
-        // 支店情報の詳細ログ
-        if (extractedData.branches && Array.isArray(extractedData.branches) && extractedData.branches.length > 0) {
-          Logger.logInfo('支店情報抽出成功: ' + companyName + ' (' + extractedData.branches.length + '件)');
-          extractedData.branches.forEach(function(branch, index) {
-            Logger.logDebug('支店' + (index + 1) + ': ' + 
-              (branch.name || '名称不明') + ' (' + (branch.type || 'タイプ不明') + ')');
-          });
-        } else {
-          Logger.logWarning('支店情報抽出結果: ' + companyName + ' (支店情報なし)');
-        }
-
-        return {
-          success: true,
-          data: extractedData,
-          usage: response.usage,
-          model: requestData.model
-        };
-      } else {
-        Logger.logError('OpenAI JSON解析失敗: ' + companyName + ' - ' + extractedData.error);
-        Logger.logDebug('解析失敗した生レスポンス: ' + content);
-        return {
-          success: false,
-          error: extractedData.error,
-          rawResponse: content,
-          usage: response.usage
-        };
-      }
+      return {
+        success: true,
+        data: parsedData,
+        sourceUrls: sourceUrls,
+        officialSiteUrl: officialSiteUrl,
+        primarySourceUrl: parsedData.primarySourceUrl
+      };
 
     } catch (error) {
       Logger.logError('OpenAI API error for company: ' + companyName, error);
@@ -387,7 +360,13 @@ var OpenAIClient = (function() {
         apiService: 'OpenAI'
       });
       
-      throw error;
+      return {
+        success: false,
+        error: error.message,
+        sourceUrls: sourceUrls || [],
+        officialSiteUrl: officialSiteUrl || '',
+        primarySourceUrl: ''
+      };
     }
   }
 
@@ -540,6 +519,188 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
   }
 
   /**
+   * Generate news summary from search results
+   */
+  function generateNewsSummary(companyName, newsContext) {
+    try {
+      Logger.logDebug('Generating news summary for: ' + companyName);
+
+      var systemPrompt = 
+        'あなたは営業戦略分析の専門家です。企業の最新ニュースから、営業活動に役立つ示唆をまとめてください。\n\n' +
+        '**営業視点でのサマリー作成ルール**:\n' +
+        '1. 営業機会につながる情報を最優先で抽出（新サービス、事業拡大、投資、提携など）\n' +
+        '2. 企業の成長性や変化を示す具体的な事実を含める（売上、従業員数、拠点数など）\n' +
+        '3. アプローチタイミングの示唆を含める（新規事業開始時、システム刷新時など）\n' +
+        '4. 競合他社との差別化ポイントがあれば言及\n' +
+        '5. 200文字以内で営業担当者が即座に活用できる形でまとめる\n' +
+        '6. ニュースがない場合は「営業に活用できる最新情報なし」と記載\n\n' +
+        '**営業活用の観点**:\n' +
+        '- 新規事業・サービス開始 → システム導入やサポート需要の可能性\n' +
+        '- 業績好調・資金調達 → 投資余力があり新規導入に前向きな可能性\n' +
+        '- 組織拡大・採用強化 → 人事システムや研修サービス需要の可能性\n' +
+        '- M&A・提携 → システム統合やインフラ整備需要の可能性\n' +
+        '- 認証取得・受賞 → 品質向上意識が高く、システム改善に積極的な可能性\n\n' +
+        '**出力形式**: 営業視点のサマリーのみを出力してください。参照URLは含めないでください。';
+
+      var userPrompt = '企業名: ' + companyName + '\n\n' +
+                      'ニュース情報:\n' + newsContext + '\n\n' +
+                      '上記から営業活動に役立つ示唆をサマリーしてください。';
+
+      var requestBody = {
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        max_tokens: 300,
+        temperature: 0.2
+      };
+
+      var response = ApiBase.post(_baseUrl + '/chat/completions', requestBody, {
+        headers: {
+          'Authorization': 'Bearer ' + getApiKey(),
+          'Content-Type': 'application/json'
+        },
+        timeout: ConfigManager.getNumber('OPENAI_TIMEOUT_MS', 30000),
+        useCache: false
+      });
+
+      if (!response.choices || response.choices.length === 0) {
+        throw new Error('No response from OpenAI API');
+      }
+
+      var summary = response.choices[0].message.content.trim();
+      
+      // ソースURLを抽出（newsContextから）
+      var sourceUrls = [];
+      var urlMatches = newsContext.match(/URL: (https?:\/\/[^\s\n]+)/g);
+      if (urlMatches) {
+        sourceUrls = urlMatches.map(function(match) {
+          return match.replace('URL: ', '');
+        }).filter(function(url, index, self) {
+          return self.indexOf(url) === index; // 重複除去
+        });
+      }
+
+      Logger.logInfo('News summary generated for: ' + companyName, {
+        summaryLength: summary.length,
+        sourceUrlCount: sourceUrls.length
+      });
+
+      return {
+        success: true,
+        summary: summary,
+        sourceUrls: sourceUrls
+      };
+
+    } catch (error) {
+      Logger.logError('News summary generation failed for: ' + companyName, error);
+      return {
+        success: false,
+        error: error.message,
+        sourceUrls: []
+      };
+    }
+  }
+
+  /**
+   * Generate recruitment summary from search results
+   */
+  function generateRecruitmentSummary(companyName, recruitmentContext) {
+    try {
+      Logger.logDebug('Generating recruitment summary for: ' + companyName);
+
+      var systemPrompt = 
+        'あなたは営業戦略分析の専門家です。企業の採用情報から、営業活動に役立つ示唆をまとめてください。\n\n' +
+        '**営業視点での採用情報サマリー作成ルール**:\n' +
+        '1. 企業の成長性を示す採用動向を最優先で抽出（大量採用、新職種採用、拠点拡大など）\n' +
+        '2. 営業機会につながる採用領域を特定（IT人材、管理部門、営業職など）\n' +
+        '3. 組織課題や成長段階を推測できる情報を含める\n' +
+        '4. アプローチすべきタイミングの示唆を含める（組織拡大期、新規事業立ち上げ期など）\n' +
+        '5. 200文字以内で営業担当者が即座に活用できる形でまとめる\n' +
+        '6. 採用情報がない場合は「営業に活用できる採用情報なし」と記載\n\n' +
+        '**営業活用の観点**:\n' +
+        '- IT・エンジニア採用 → システム導入への前向きさ、技術革新への意欲\n' +
+        '- 管理部門採用 → 業務効率化システム需要、内部統制強化の可能性\n' +
+        '- 営業職採用 → CRM・営業支援ツール需要、売上拡大への意欲\n' +
+        '- 大量採用 → 人事システム・研修サービス需要、組織拡大期\n' +
+        '- 新拠点・海外展開 → インフラ整備、システム統合需要\n\n' +
+        '**出力形式**: 営業視点のサマリーのみを出力してください。参照URLは含めないでください。';
+
+      var userPrompt = '企業名: ' + companyName + '\n\n' +
+                      '採用情報:\n' + recruitmentContext + '\n\n' +
+                      '上記から営業活動に役立つ示唆をサマリーしてください。';
+
+      var requestBody = {
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        max_tokens: 300,
+        temperature: 0.2
+      };
+
+      var response = ApiBase.post(_baseUrl + '/chat/completions', requestBody, {
+        headers: {
+          'Authorization': 'Bearer ' + getApiKey(),
+          'Content-Type': 'application/json'
+        },
+        timeout: ConfigManager.getNumber('OPENAI_TIMEOUT_MS', 30000),
+        useCache: false
+      });
+
+      if (!response.choices || response.choices.length === 0) {
+        throw new Error('No response from OpenAI API');
+      }
+
+      var summary = response.choices[0].message.content.trim();
+      
+      // ソースURLを抽出（recruitmentContextから）
+      var sourceUrls = [];
+      var urlMatches = recruitmentContext.match(/URL: (https?:\/\/[^\s\n]+)/g);
+      if (urlMatches) {
+        sourceUrls = urlMatches.map(function(match) {
+          return match.replace('URL: ', '');
+        }).filter(function(url, index, self) {
+          return self.indexOf(url) === index; // 重複除去
+        });
+      }
+
+      Logger.logInfo('Recruitment summary generated for: ' + companyName, {
+        summaryLength: summary.length,
+        sourceUrlCount: sourceUrls.length
+      });
+
+      return {
+        success: true,
+        summary: summary,
+        sourceUrls: sourceUrls
+      };
+
+    } catch (error) {
+      Logger.logError('Recruitment summary generation failed for: ' + companyName, error);
+      return {
+        success: false,
+        error: error.message,
+        sourceUrls: []
+      };
+    }
+  }
+
+  /**
    * Test API connection
    */
   function testConnection() {
@@ -599,6 +760,8 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
     extractCompanyInfo: extractCompanyInfo,
     analyzeCompanyInfo: analyzeCompanyInfo,
     generateSummary: generateSummary,
+    generateNewsSummary: generateNewsSummary,
+    generateRecruitmentSummary: generateRecruitmentSummary,
     testConnection: testConnection,
     getApiStats: getApiStats
   };

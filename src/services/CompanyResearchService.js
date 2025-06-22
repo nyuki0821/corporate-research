@@ -161,12 +161,20 @@ function CompanyResearchService() {
       }
 
       var extractedData = analysisResult.data;
+      
+      // ソースURL情報を追加
+      extractedData.sourceUrls = analysisResult.sourceUrls || [];
+      extractedData.officialSiteUrl = analysisResult.officialSiteUrl || '';
+      extractedData.primarySourceUrl = analysisResult.primarySourceUrl || '';
+      
       Logger.logInfo('AI analysis completed', {
         companyName: companyName,
         fieldsExtracted: Object.keys(extractedData).filter(function(key) {
           return extractedData[key] !== null && extractedData[key] !== '' && extractedData[key] !== undefined;
         }).length,
-        reliabilityScore: extractedData.reliabilityScore
+        reliabilityScore: extractedData.reliabilityScore,
+        sourceUrlCount: extractedData.sourceUrls.length,
+        officialSiteFound: !!extractedData.officialSiteUrl
       });
 
       return extractedData;
@@ -178,12 +186,18 @@ function CompanyResearchService() {
   }
 
   /**
-   * 検索結果からコンテキストを構築
+   * 検索結果からコンテキストを構築（コンテキスト長制限付き）
    */
   function buildSearchContext(results) {
     if (!results || results.length === 0) {
       return '';
     }
+
+    // コンテキスト長制限（約80,000文字 = 約100,000トークン相当、安全マージン込み）
+    var MAX_CONTEXT_LENGTH = 80000;
+    var MAX_RESULT_LENGTH = 8000; // 1つの検索結果あたりの最大長
+    var currentLength = 0;
+    var processedResults = [];
 
     // 検索結果の概要をログ出力
     Logger.logDebug('Building search context from results', {
@@ -201,7 +215,15 @@ function CompanyResearchService() {
       });
     }
 
-    return results.map(function(result, index) {
+    // 検索結果を処理（公式サイトを優先）
+    var sortedResults = results.slice().sort(function(a, b) {
+      if (a.isOfficial && !b.isOfficial) return -1;
+      if (!a.isOfficial && b.isOfficial) return 1;
+      return 0;
+    });
+
+    for (var i = 0; i < sortedResults.length; i++) {
+      var result = sortedResults[i];
       var content = result.content || '';
       var title = result.title || '';
       var url = result.url || '';
@@ -209,11 +231,44 @@ function CompanyResearchService() {
       // 公式サイトかどうかを明示
       var siteType = result.isOfficial ? '[公式サイト] ' : '';
       
-      return '=== 検索結果 ' + (index + 1) + ' ' + siteType + '===\n' +
-             'タイトル: ' + title + '\n' +
-             'URL: ' + url + '\n' +
-             'コンテンツ:\n' + content + '\n';
-    }).join('\n');
+      // コンテンツ長を制限
+      if (content.length > MAX_RESULT_LENGTH) {
+        // 重要な情報が含まれやすい前半部分を優先的に保持
+        content = content.substring(0, MAX_RESULT_LENGTH) + '...[内容省略]';
+      }
+      
+      var resultText = '=== 検索結果 ' + (i + 1) + ' ' + siteType + '===\n' +
+                      'タイトル: ' + title + '\n' +
+                      'URL: ' + url + '\n' +
+                      'コンテンツ:\n' + content + '\n';
+      
+      // コンテキスト長制限チェック
+      if (currentLength + resultText.length > MAX_CONTEXT_LENGTH) {
+        Logger.logInfo('コンテキスト長制限により検索結果を切り詰めました', {
+          originalResults: results.length,
+          processedResults: processedResults.length,
+          finalContextLength: currentLength,
+          maxContextLength: MAX_CONTEXT_LENGTH
+        });
+        break;
+      }
+      
+      processedResults.push(resultText);
+      currentLength += resultText.length;
+    }
+
+    var finalContext = processedResults.join('\n');
+    
+    Logger.logInfo('Search context built successfully', {
+      originalResults: results.length,
+      processedResults: processedResults.length,
+      finalContextLength: finalContext.length,
+      compressionRatio: Math.round((finalContext.length / results.reduce(function(sum, r) { 
+        return sum + (r.content ? r.content.length : 0); 
+      }, 0)) * 100) + '%'
+    });
+
+    return finalContext;
   }
 
   /**
@@ -486,7 +541,7 @@ function CompanyResearchService() {
   }
   
   /**
-   * ニュース検索結果からサマリーを生成
+   * 最新ニュース検索結果からサマリーを生成
    */
   function generateNewsSummary(newsResults, companyName) {
     try {
@@ -494,14 +549,15 @@ function CompanyResearchService() {
         return '';
       }
       
-      // 最大3件のニュースを取得
+      // 最大3件のニュースを取得（公式サイトを優先）
       var topNews = newsResults.slice(0, 3);
       
       // OpenAIでサマリー生成
       var newsContext = topNews.map(function(news, index) {
-        return '【ニュース' + (index + 1) + '】\n' +
+        var label = news.isOfficial ? '【公式発表】' : '【ニュース' + (index + 1) + '】';
+        return label + '\n' +
                'タイトル: ' + news.title + '\n' +
-               '内容: ' + (news.content ? news.content.substring(0, 300) + '...' : '') + '\n' +
+               '内容: ' + (news.content ? news.content.substring(0, 400) + '...' : '') + '\n' +
                'URL: ' + news.url;
       }).join('\n\n');
       
@@ -509,13 +565,20 @@ function CompanyResearchService() {
       
       if (summaryResult.success && summaryResult.summary) {
         // サマリーに参照URLを追加
-        var urls = topNews.map(function(news) {
-          return news.url;
-        }).filter(function(url) { return url; });
-        
         var summaryWithUrls = summaryResult.summary;
-        if (urls.length > 0) {
-          summaryWithUrls += '\n\n【参照URL】\n' + urls.join('\n');
+        
+        // 公式サイトのURLを優先して表示
+        var officialUrls = topNews.filter(function(news) { return news.isOfficial; }).map(function(news) { return news.url; });
+        var otherUrls = topNews.filter(function(news) { return !news.isOfficial; }).map(function(news) { return news.url; });
+        
+        var allUrls = officialUrls.concat(otherUrls).filter(function(url) { return url; });
+        
+        if (allUrls.length > 0) {
+          summaryWithUrls += '\n\n【参照URL】';
+          allUrls.forEach(function(url, index) {
+            var prefix = officialUrls.indexOf(url) !== -1 ? '[公式] ' : '';
+            summaryWithUrls += '\n' + prefix + url;
+          });
         }
         
         return summaryWithUrls;
@@ -523,11 +586,14 @@ function CompanyResearchService() {
       
       // OpenAIが失敗した場合の簡易サマリー
       var fallbackSummary = '最新ニュース: ';
-      if (topNews[0]) {
+      var officialNews = topNews.find(function(news) { return news.isOfficial; });
+      
+      if (officialNews) {
+        fallbackSummary += officialNews.title;
+        fallbackSummary += '\n\n【参照URL】\n[公式] ' + officialNews.url;
+      } else if (topNews[0]) {
         fallbackSummary += topNews[0].title;
-        if (topNews[0].url) {
-          fallbackSummary += '\n【参照URL】\n' + topNews[0].url;
-        }
+        fallbackSummary += '\n\n【参照URL】\n' + topNews[0].url;
       }
       
       return fallbackSummary;
@@ -555,7 +621,7 @@ function CompanyResearchService() {
         var label = rec.isOfficialRecruitment ? '【公式採用ページ】' : '【採用情報' + (index + 1) + '】';
         return label + '\n' +
                'タイトル: ' + rec.title + '\n' +
-               '内容: ' + (rec.content ? rec.content.substring(0, 300) + '...' : '') + '\n' +
+               '内容: ' + (rec.content ? rec.content.substring(0, 400) + '...' : '') + '\n' +
                'URL: ' + rec.url;
       }).join('\n\n');
       
@@ -563,13 +629,20 @@ function CompanyResearchService() {
       
       if (summaryResult.success && summaryResult.summary) {
         // サマリーに参照URLを追加
-        var urls = topRecruitment.map(function(rec) {
-          return rec.url;
-        }).filter(function(url) { return url; });
-        
         var summaryWithUrls = summaryResult.summary;
-        if (urls.length > 0) {
-          summaryWithUrls += '\n\n【参照URL】\n' + urls.join('\n');
+        
+        // 公式採用ページのURLを優先して表示
+        var officialUrls = topRecruitment.filter(function(rec) { return rec.isOfficialRecruitment; }).map(function(rec) { return rec.url; });
+        var otherUrls = topRecruitment.filter(function(rec) { return !rec.isOfficialRecruitment; }).map(function(rec) { return rec.url; });
+        
+        var allUrls = officialUrls.concat(otherUrls).filter(function(url) { return url; });
+        
+        if (allUrls.length > 0) {
+          summaryWithUrls += '\n\n【参照URL】';
+          allUrls.forEach(function(url, index) {
+            var prefix = officialUrls.indexOf(url) !== -1 ? '[公式] ' : '';
+            summaryWithUrls += '\n' + prefix + url;
+          });
         }
         
         return summaryWithUrls;
@@ -581,14 +654,10 @@ function CompanyResearchService() {
       
       if (officialPage) {
         fallbackSummary += '採用ページあり';
-        if (officialPage.url) {
-          fallbackSummary += '\n【参照URL】\n' + officialPage.url;
-        }
+        fallbackSummary += '\n\n【参照URL】\n[公式] ' + officialPage.url;
       } else if (topRecruitment[0]) {
         fallbackSummary += topRecruitment[0].title;
-        if (topRecruitment[0].url) {
-          fallbackSummary += '\n【参照URL】\n' + topRecruitment[0].url;
-        }
+        fallbackSummary += '\n\n【参照URL】\n' + topRecruitment[0].url;
       }
       
       return fallbackSummary;
