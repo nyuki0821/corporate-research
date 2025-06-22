@@ -10,8 +10,169 @@
 - 🏢 **支店情報の詳細抽出**: 住所、電話番号、従業員数、営業時間など
 - 📧 **バッチ処理とメール通知**: 複数企業の一括処理
 
-## システム構成図
+## 🚀 セットアップ手順
 
+このシステムをセットアップし、使用を開始するための手順です。
+
+### 1. プロジェクトの準備
+1.  **リポジトリをクローン**: ローカル環境にプロジェクトをコピーします。
+    ```bash
+    git clone https://github.com/your-repo/corporate_research.git
+    ```
+2.  **`clasp` でログイン**: Googleアカウントにログインします。
+    ```bash
+    clasp login
+    ```
+3.  **GASプロジェクトと連携**:
+    - **新規作成の場合**: `clasp create --title "企業情報収集システム"`
+    - **既存連携の場合**: `clasp clone <scriptId>`
+4.  **コードをプッシュ**: ローカルのソースコードをGoogle Apps Scriptにアップロードします。
+    ```bash
+    clasp push -f
+    ```
+
+### 2. スクリプトプロパティの設定
+Google Apps Scriptエディタの左メニュー「プロジェクトの設定」>「スクリプトプロパティ」で、以下のキーと値を設定します。
+
+| キー | 説明 | 例 |
+|---|---|---|
+| `TAVILY_API_KEY` | Tavily AIのAPIキー | `tvly-xxxx` |
+| `OPENAI_API_KEY` | OpenAIのAPIキー | `sk-xxxx` |
+| `SPREADSHEET_ID` | 使用するGoogleスプレッドシートのID | `12345abcde...` |
+| `NOTIFICATION_EMAIL` | バッチ処理完了時の通知先メールアドレス | `user@example.com` |
+
+### 3. Googleスプレッドシートの準備
+`SPREADSHEET_ID`で指定したスプレッドシートに、以下の3つのシートを作成してください。
+
+1.  **企業リスト**: 調査したい企業名をA列に入力します。
+2.  **本社情報**: 収集した本社情報が保存されます。ヘッダー行は初回実行時に自動生成されます。
+3.  **支店情報**: 収集した支店情報が保存されます。ヘッダー行は初回実行時に自動生成されます。
+
+### 4. トリガーの設定 (オプション)
+定期的にバッチ処理を実行したい場合は、`src/main/TriggerManager.js` の `createTimeBasedTrigger` 関数を実行して、トリガーを設定してください。
+
+---
+
+## 💡 主な使い方
+
+### 1. 調査したい企業をリストに追加
+- 「企業リスト」シートのA列に、調査したい会社の名前を一行ずつ入力します。
+
+### 2. バッチ処理を実行
+- Google Apps Scriptエディタで `src/main/Main.js` を開き、`startBatchProcessing` 関数を実行します。
+- これにより、「企業リスト」シートに記載された企業の調査が開始されます。
+
+### 3. 結果を確認
+- 処理が完了すると、「本社情報」シートと「支店情報」シートに収集されたデータが書き込まれます。
+- スクリプトプロパティで `NOTIFICATION_EMAIL` を設定している場合、処理完了後にメールで通知が届きます。
+
+---
+
+## 🧪 テスト実行ガイド
+
+このプロジェクトでは、品質を保証するために4階層のテスト戦略を採用しています。それぞれのテストが異なる目的を持ち、開発の各フェーズで品質を確保します。
+
+```mermaid
+graph TD
+    subgraph "本番環境"
+        D[🚀 本番テスト]
+    end
+    subgraph "モック環境"
+        C[🌐 E2Eテスト]
+        B[🔗 統合テスト]
+        A[🔧 単体テスト]
+    end
+    A --> B --> C --> D
+```
+
+| テスト種別 | 目的 | 実行環境 | 特徴 |
+|---|---|---|---|
+| **単体テスト** | モジュール単体の動作を検証 | モック | 高速・高頻度で実行 |
+| **統合テスト** | 複数モジュール間の連携を検証 | モック | 単体テストより広範囲 |
+| **E2Eテスト** | ユーザーの操作フロー全体を検証 | モック | 実運用に近いシナリオ |
+| **本番テスト** | 実際のAPIやデータで最終検証 | **本番** | リリース前の最終確認 |
+
+### 1. 単体テスト (Unit Tests)
+
+**目的**:
+個別の関数やクラス（モジュール）が、意図した通りに正しく動作するかを検証します。外部の依存関係（API、スプレッドシートなど）はすべてモックに置き換えて、テスト対象のロジックのみに集中します。
+
+**実行方法**:
+- **すべての単体テストを実行**: `TestRunner.js` -> `runUnitTests()`
+- **特定のコンポーネントのテストを実行**: `TestRunner.js` -> `runComponentTests('コンポーネント名')`
+  - 例: `runComponentTests('ConfigManager')`
+
+**対象ファイル**: `src/tests/unit/`
+
+---
+
+### 2. 統合テスト (Integration Tests)
+
+**目的**:
+複数のモジュールを組み合わせたときに、それらが正しく連携して動作するかを検証します。例えば、「企業調査サービスがAPIクライアントを呼び出し、結果を正しく処理できるか」といったシナリオを確認します。単体テスト同様、外部APIなどはモック化します。
+
+**実行方法**:
+- **すべての統合テストを実行**: `TestRunner.js` -> `runIntegrationTests()`
+
+**対象ファイル**: `src/tests/integration/`
+
+---
+
+### 3. E2Eテスト (End-to-End Tests)
+
+**目的**:
+ユーザーの操作を模倣し、アプリケーション全体のワークフローが最初から最後まで正常に完了するかを検証します。「企業リストを読み込み、情報を収集し、スプレッドシートに書き込む」といった一連の流れをテストします。このテストもモック環境で実行し、システム全体のロジックに不整合がないかを確認します。
+
+**実行方法**:
+- **すべてのE2Eテストを実行**: `TestRunner.js` -> `runE2ETests()`
+
+**対象ファイル**: `src/tests/e2e/`
+
+---
+
+### 4. 本番テスト (Production Tests)
+
+**🚨 注意: このテストは実際のAPIを呼び出し、実際のデータを扱います。APIの利用料金や、データの上書きに十分注意してください。**
+
+**目的**:
+モック環境では確認できない、実際の外部APIとの接続や、本番環境特有の問題を検出するための最終テストです。リリース前の最終的な品質保証として実施します。
+
+**実行方法**:
+`src/tests/production/ProductionTests.js` ファイル内の関数を実行します。
+
+**推奨される実行手順**:
+1.  **設定確認 (`checkApiConfiguration`)**: APIキーやスプレッドシートIDが正しく設定されているかを確認します。
+2.  **API接続テスト (`testRealApiConnections`)**: TavilyとOpenAIのAPIに実際に接続できるかを確認します。
+3.  **単一企業テスト (`testSingleCompanyResearch`)**: 1社分の調査を実際に実行し、データが取得できるかを確認します。
+4.  **小規模バッチテスト (`testSmallBatchProcessing`)**: 3〜5社程度の小さなバッチ処理が正常に動作するかを確認します。
+5.  **包括テスト (`runProductionTests`)**: 上記を含むすべての本番テストを順次実行します。リリース前の最終確認に最適です。
+
+---
+
+### 開発フローとテスト戦略
+
+**全体実行**:
+`TestRunner.js` の `runAllTests()` を実行すると、単体・統合・E2Eテストがすべて実行されます。開発中はこれを基本とします。
+
+**推奨テストフロー**:
+
+1.  **機能開発時**:
+    - `runUnitTests()` や `runComponentTests()` で、修正箇所の単体テストを頻繁に実行します。
+    - 機能の区切りで `runAllTests()` を実行し、既存機能への影響（デグレード）がないか確認します。
+
+2.  **リリース前**:
+    - `runAllTests()` でモック環境でのテストがすべて成功することを確認します。
+    - `runProductionTests()` を実行し、本番環境での動作を最終確認します。
+
+### テストサポートツール
+- **GasT Framework**: BDDスタイルの構文（`describe`, `it`, `expect`）でテストを記述できる、GAS専用の軽量テストフレームワークです。
+- **MockFactory / TestDataFactory**: テスト用のモックオブジェクトやテストデータを簡単に生成するためのユーティリティです。
+
+---
+
+## 📐 システムアーキテクチャ
+
+### システム構成図
 ```mermaid
 graph TB
     subgraph "Google Workspace"
@@ -62,8 +223,7 @@ graph TB
     SPREAD --> SS
 ```
 
-## データフロー図
-
+### データフロー図
 ```mermaid
 sequenceDiagram
     participant User as ユーザー
@@ -93,8 +253,7 @@ sequenceDiagram
     Batch->>User: メール通知
 ```
 
-## ディレクトリ構造
-
+## 📁 ディレクトリ構造
 ```
 corporate_research/
 ├── README.md                 # メインドキュメント
@@ -193,498 +352,6 @@ GPT-4を使用した情報抽出：
 - キーワードベースの分類
 - 住所情報からの拠点タイプ判定
 - 重要度ランクの自動計算
-
-## 🧪 テスト実行ガイド
-
-このプロジェクトでは、品質を保証するために4階層のテスト戦略を採用しています。これはテストピラミッドの考え方を拡張したもので、それぞれのテストが異なる目的を持っています。
-
-```mermaid
-graph TD
-    subgraph "本番環境"
-        D[🚀 本番テスト]
-    end
-    subgraph "モック環境"
-        C[🌐 E2Eテスト]
-        B[🔗 統合テスト]
-        A[🔧 単体テスト]
-    end
-    A --> B --> C --> D
-```
-
-| テスト種別 | 目的 | 実行環境 | 特徴 |
-|---|---|---|---|
-| **単体テスト** | モジュール単体の動作を検証 | モック | 高速・高頻度で実行 |
-| **統合テスト** | 複数モジュール間の連携を検証 | モック | 単体テストより広範囲 |
-| **E2Eテスト** | ユーザーの操作フロー全体を検証 | モック | 実運用に近いシナリオ |
-| **本番テスト** | 実際のAPIやデータで最終検証 | **本番** | リリース前の最終確認 |
-
----
-
-### 1. 単体テスト (Unit Tests)
-
-**目的**:
-個別の関数やクラス（モジュール）が、意図した通りに正しく動作するかを検証します。外部の依存関係（API、スプレッドシートなど）はすべてモックに置き換えて、テスト対象のロジックのみに集中します。
-
-**実行方法**:
-- **すべての単体テストを実行**: `TestRunner.js` -> `runUnitTests()`
-- **特定のコンポーネントのテストを実行**: `TestRunner.js` -> `runComponentTests('コンポーネント名')`
-  - 例: `runComponentTests('ConfigManager')`
-
-**対象ファイル**:
-- `src/tests/unit/` 以下に配置されています。
-
----
-
-### 2. 統合テスト (Integration Tests)
-
-**目的**:
-複数のモジュールを組み合わせたときに、それらが正しく連携して動作するかを検証します。例えば、「企業調査サービスがAPIクライアントを呼び出し、結果を正しく処理できるか」といったシナリオを確認します。単体テスト同様、外部APIなどはモック化します。
-
-**実行方法**:
-- **すべての統合テストを実行**: `TestRunner.js` -> `runIntegrationTests()`
-
-**対象ファイル**:
-- `src/tests/integration/` 以下に配置されています。
-
----
-
-### 3. E2Eテスト (End-to-End Tests)
-
-**目的**:
-ユーザーの操作を模倣し、アプリケーション全体のワークフローが最初から最後まで正常に完了するかを検証します。「企業リストを読み込み、情報を収集し、スプレッドシートに書き込む」といった一連の流れをテストします。このテストもモック環境で実行し、システム全体のロジックに不整合がないかを確認します。
-
-**実行方法**:
-- **すべてのE2Eテストを実行**: `TestRunner.js` -> `runE2ETests()`
-
-**対象ファイル**:
-- `src/tests/e2e/` 以下に配置されています。
-
----
-
-### 🚀 4. 本番テスト (Production Tests)
-
-**🚨 注意: このテストは実際のAPIを呼び出し、実際のデータを扱います。APIの利用料金や、データの上書きに十分注意してください。**
-
-**目的**:
-モック環境では確認できない、実際の外部APIとの接続や、本番環境特有の問題を検出するための最終テストです。リリース前の最終的な品質保証として実施します。
-
-**実行方法**:
-`src/tests/production/ProductionTests.js` ファイル内の関数を実行します。
-
-**推奨される実行手順**:
-
-1.  **設定確認 (`checkApiConfiguration`)**:
-    APIキーやスプレッドシートIDが正しく設定されているかを確認します。
-
-2.  **API接続テスト (`testRealApiConnections`)**:
-    TavilyとOpenAIのAPIに実際に接続できるかを確認します。
-
-3.  **単一企業テスト (`testSingleCompanyResearch`)**:
-    1社分の調査を実際に実行し、データが取得できるかを確認します。
-
-4.  **小規模バッチテスト (`testSmallBatchProcessing`)**:
-    3〜5社程度の小さなバッチ処理が正常に動作するかを確認します。
-
-5.  **包括テスト (`runProductionTests`)**:
-    上記を含むすべての本番テストを順次実行します。リリース前の最終確認に最適です。
-
-**実行結果の例**:
-```
-🚀 本番環境テスト実行開始
-================================
-...
-🎉 全ての本番環境テストが成功しました！
-```
-
-**トラブルシューティング**:
-- **API接続エラー**: APIキーやネットワーク接続を確認してください。
-- **タイムアウト**: バッチサイズを小さくして試してください。
-
----
-
-### 🧪 テストの全体実行と推奨フロー
-
-**全体実行**:
-`TestRunner.js` の `runAllTests()` を実行すると、単体・統合・E2Eテストがすべて実行されます。開発中はこれを基本とします。
-
-**推奨テストフロー**:
-
-1.  **機能開発時**:
-    - `runUnitTests()` や `runComponentTests()` で、修正箇所の単体テストを頻繁に実行します。
-    - 機能の区切りで `runAllTests()` を実行し、既存機能への影響（デグレード）がないか確認します。
-
-2.  **リリース前**:
-    - `runAllTests()` でモック環境でのテストがすべて成功することを確認します。
-    - `runProductionTests()` を実行し、本番環境での動作を最終確認します。
-
----
-### 🛠️ テストサポートツール
-
-- **GasT Framework**: BDDスタイルの構文（`describe`, `it`, `expect`）でテストを記述できる、GAS専用の軽量テストフレームワークです。
-- **MockFactory / TestDataFactory**: テスト用のモックオブジェクトやテストデータを簡単に生成するためのユーティリティです。これにより、テストの準備が簡素化されます。
-
-## セットアップ手順
-
-### 🚀 クイックスタート
-
-**📁 実行ファイル**: `src/setup/SetupGuide.js`
-
-Google Apps Script エディタで以下を実行するだけで始められます：
-
-```javascript
-// 1. セットアップガイドを表示
-SetupGuide.showWelcome()   // SetupGuide.js の関数
-
-// 2. システム状況確認
-SetupGuide.checkStatus()   // SetupGuide.js の関数
-
-// 3. クイックセットアップ実行
-SetupGuide.quickSetup()    // SetupGuide.js の関数
-```
-
-**📋 実行手順**:
-1. Google Apps Scriptエディタで `SetupGuide.js` を開く
-2. 関数選択で実行したい関数を選択
-3. ▶️ 実行ボタンをクリック
-
-### 📋 詳細セットアップ手順
-
-**📁 実行ファイル**: 主に `src/setup/SetupGuide.js` と `src/tests/SystemTest.js`
-
-1. **システム初期化**
-   ```javascript
-   runInitializationTest()      // SystemTest.js の関数
-   ```
-
-2. **APIキーの設定**
-   ```javascript
-   SetupGuide.showApiKeyGuide() // SetupGuide.js の関数（設定方法を表示）
-   ```
-   - Google Apps Scriptエディタで「プロジェクトの設定」→「スクリプトプロパティ」
-   - 以下を設定：
-     - `TAVILY_API_KEY`: Tavily AIのAPIキー
-     - `OPENAI_API_KEY`: OpenAIのAPIキー
-     - `NOTIFICATION_EMAIL`: 通知用メールアドレス
-
-3. **API接続テスト**
-   ```javascript
-   testApiConnectivity()        // SystemTest.js の関数
-   ```
-
-4. **スプレッドシート準備**
-   ```javascript
-   createSampleSpreadsheet()    // SystemTest.js の関数
-   ```
-
-5. **トリガー設定**
-   ```javascript
-   setupTriggers()              // SystemTest.js の関数
-   ```
-
-6. **セットアップ完了確認**
-   ```javascript
-   SetupGuide.verifyComplete()  // SetupGuide.js の関数
-   ```
-
-**📋 実行手順**:
-1. Google Apps Scriptエディタで対象ファイルを開く
-2. 関数選択で実行したい関数を選択
-3. ▶️ 実行ボタンをクリック
-
-詳細なセットアップ手順は [setup.md](docs/setup.md) を参照してください。
-
-## 🚀 使い方
-
-### 基本的な使い方
-
-#### 1. 企業調査テスト
-
-**📁 実行ファイル**: `src/tests/SystemTest.js`
-
-```javascript
-testSampleCompanyResearch()  // SystemTest.js の関数
-```
-
-#### 2. バッチ処理の開始
-
-**📁 実行ファイル**: `src/main/Main.js`
-
-```javascript
-startBatchProcessing()       // Main.js の関数
-```
-
-#### 3. システム状況確認
-
-**📁 実行ファイル**: `src/setup/SetupGuide.js`
-
-```javascript
-SetupGuide.checkStatus()     // SetupGuide.js の関数
-```
-
-### テスト実行
-
-#### システムテスト
-
-**📁 実行ファイル**: `src/tests/SystemTest.js`
-
-```javascript
-// 完全システムテスト
-runSystemTests()             // SystemTest.js の関数
-
-// 初期化テスト
-runInitializationTest()      // SystemTest.js の関数
-
-// クイックテスト
-runQuickTest()               // SystemTest.js の関数
-```
-
-### セットアップ関連
-
-#### セットアップガイド
-
-**📁 実行ファイル**: `src/setup/SetupGuide.js`
-
-```javascript
-// ヘルプ表示
-SetupGuide.showHelp()        // SetupGuide.js の関数
-
-// API設定ガイド
-SetupGuide.showApiKeyGuide() // SetupGuide.js の関数
-
-// セットアップ状況確認
-SetupGuide.checkStatus()     // SetupGuide.js の関数
-```
-
-## 🧪 テスト
-
-### 最新のテストアーキテクチャ
-
-本システムは、業界標準のテストピラミッドに基づいた包括的なテスト体制を実装しています：
-
-```
-         /\
-        /E2E\      (10%) - エンドツーエンドテスト
-       /統合  \     (20%) - 統合テスト  
-      /単体    \    (70%) - 単体テスト
-     /基盤      \   テストフレームワーク（GasT）
-    ‾‾‾‾‾‾‾‾‾‾‾‾‾
-```
-
-### テストフレームワーク - GasT
-
-Google Apps Script専用に開発された軽量テストフレームワーク：
-
-- **BDD風の記述**: `describe`、`it`、`expect` による直感的なテスト記述
-- **豊富なアサーション**: `toBe`、`toEqual`、`toContain`、`toThrow` など
-- **セットアップ/ティアダウン**: `beforeEach`、`afterEach`、`beforeAll`、`afterAll`
-- **詳細なレポート**: テスト結果の視覚的な表示と統計情報
-
-### テスト実行方法
-
-#### 1. 基本的なテスト実行
-
-**📁 実行ファイル**: `src/tests/framework/TestRunner.js`
-
-```javascript
-// すべてのテストを実行
-runAllTests()              // TestRunner.js の関数
-
-// 単体テストのみ実行
-runUnitTests()             // TestRunner.js の関数
-
-// 統合テストのみ実行  
-runIntegrationTests()      // TestRunner.js の関数
-
-// E2Eテストのみ実行
-runE2ETests()              // TestRunner.js の関数
-
-// クイックテスト（重要なテストのみ）
-runQuickTests()            // TestRunner.js の関数
-```
-
-**📋 実行手順**:
-1. Google Apps Scriptエディタで `TestRunner.js` を開く
-2. 関数選択で実行したい関数を選択
-3. ▶️ 実行ボタンをクリック
-
-#### 2. コンポーネント別テスト実行
-
-**📁 実行ファイル**: `src/tests/framework/TestRunner.js`
-
-```javascript
-// 特定コンポーネントのテストを実行
-runComponentTests('ConfigManager')         // TestRunner.js の関数
-runComponentTests('TavilyClient')          // TestRunner.js の関数
-runComponentTests('Company')               // TestRunner.js の関数
-runComponentTests('CompanyResearchService') // TestRunner.js の関数
-```
-
-#### 3. npm経由でのテスト実行
-```bash
-npm run test:unit        # 単体テスト
-npm run test:integration # 統合テスト
-npm run test:all        # 全テスト
-```
-
-### テスト結果の確認
-
-#### コンソール出力例
-```
-🚀 Running GasT Test Suite
-════════════════════════════════════════════════════════════
-
-🧪 Test Suite: ConfigManager Unit Tests
-══════════════════════════════════════════════════
-  ✅ should get property value
-  ✅ should return null for non-existent property
-  ✅ should set property value
-  ✅ should validate required API keys
-
-✅ Suite Summary:
-  Passed: 4
-  Failed: 0
-  Duration: 125ms
-
-════════════════════════════════════════════════════════════
-📊 FINAL RESULTS
-════════════════════════════════════════════════════════════
-Total Tests: 25
-Passed: 24 ✅
-Failed: 1 ❌
-Duration: 3250ms
-Success Rate: 96%
-```
-
-### テストヘルプ
-
-**📁 実行ファイル**: `src/tests/framework/TestRunner.js`
-
-```javascript
-// 利用可能なテストコマンドを表示
-showTestHelp()             // TestRunner.js の関数
-```
-
-**📋 実行手順**:
-1. Google Apps Scriptエディタで `TestRunner.js` を開く
-2. 関数選択で `showTestHelp` を選択
-3. ▶️ 実行ボタンをクリック
-
-### テストの詳細
-
-#### 単体テスト (Unit Tests)
-個々のコンポーネントを独立してテスト：
-
-- **ConfigManager**: 設定管理機能のテスト
-- **Company Model**: 企業データモデルの検証
-- **TavilyClient**: API通信のモックテスト
-- **OpenAIClient**: AI処理のモックテスト
-
-#### 統合テスト (Integration Tests)
-複数のコンポーネントの連携をテスト：
-
-- **CompanyResearchService**: 企業調査サービスの統合動作
-- **API連携**: TavilyとOpenAIの協調動作
-- **エラーハンドリング**: 異常系の処理確認
-
-#### E2Eテスト (End-to-End Tests)
-実際のワークフロー全体をテスト：
-
-- **完全ワークフロー**: 企業リスト読込から結果保存まで
-- **エラー処理**: 実運用でのエラーシナリオ
-- **パフォーマンス**: 大量データ処理の性能測定
-
-### モックとテストデータ
-
-#### TestDataFactory
-テストデータを生成するユーティリティ：
-
-```javascript
-// 企業データの生成
-var company = TestDataFactory.createCompany({
-  companyName: 'テスト株式会社',
-  employees: 500
-});
-
-// APIレスポンスの生成
-var response = TestDataFactory.createTavilyResponse();
-```
-
-#### MockFactory
-各種サービスのモックを生成：
-
-```javascript
-// SpreadsheetServiceのモック
-var mockSpreadsheet = MockFactory.createSpreadsheetServiceMock();
-
-// APIクライアントのモック
-var mockTavily = MockFactory.createTavilyClientMock();
-```
-
-### テストのベストプラクティス
-
-#### 1. テスト駆動開発 (TDD)
-```javascript
-// 1. まずテストを書く
-GasT.describe('新機能', function() {
-  GasT.it('期待される動作', function() {
-    GasT.expect(newFeature()).toBe(expectedResult);
-  });
-});
-
-// 2. テストが失敗することを確認
-// 3. 機能を実装
-// 4. テストが成功することを確認
-```
-
-#### 2. モックの活用
-```javascript
-// 外部依存をモック化
-var mockApi = MockFactory.createTavilyClientMock({
-  searchCompany: function() {
-    return Promise.resolve({ success: true });
-  }
-});
-```
-
-#### 3. 定期的なテスト実行
-- **開発時**: `runQuickTests()` - 基本機能の確認
-- **コミット前**: `runUnitTests()` - 単体テストの実行
-- **プルリクエスト**: `runIntegrationTests()` - 統合テストの実行
-- **リリース前**: `runAllTests()` - 全テストの実行
-
-### トラブルシューティング
-
-#### テスト失敗の対処法
-
-1. **個別コンポーネントの確認**
-   ```javascript
-   runComponentTest("失敗したコンポーネント名")
-   ```
-
-2. **設定の確認**
-   ```javascript
-   checkTestConfiguration()
-   ```
-
-3. **段階的テスト**
-   ```javascript
-   // 1. 簡易テストから開始
-   runQuickTest()
-   
-   // 2. 単体テストのみ実行
-   runUnitTestsOnly()
-   
-   // 3. 統合テストを実行
-   runIntegrationTestsOnly()
-   ```
-
-#### よくある問題
-
-| 問題 | 原因 | 解決方法 |
-|------|------|----------|
-| `ReferenceError: クラス名 is not defined` | 必要なファイルが読み込まれていない | 全ファイルがGoogle Apps Scriptにプッシュされているか確認 |
-| テストタイムアウト | 処理が重い | `runQuickTest()`で基本機能を確認後、個別テストを実行 |
-| スプレッドシートエラー | 権限不足 | スプレッドシートへの書き込み権限を確認 |
 
 ## 🔄 最近の改善点
 
