@@ -298,7 +298,7 @@ var Main = (function() {
       var ui = SpreadsheetApp.getUi();
       var response = ui.prompt(
         'Batch Processing',
-        'Enter the number of companies to process (max 50):',
+        'Enter the number of companies to process (max 8 due to 6-minute execution limit):',
         ui.ButtonSet.OK_CANCEL
       );
       
@@ -308,8 +308,8 @@ var Main = (function() {
       
       var batchSize = parseInt(response.getResponseText());
       
-      if (isNaN(batchSize) || batchSize < 1 || batchSize > 50) {
-        ui.alert('Please enter a valid number between 1 and 50');
+      if (isNaN(batchSize) || batchSize < 1 || batchSize > 8) {
+        ui.alert('Please enter a valid number between 1 and 8 (execution time limit: 6 minutes)');
         return;
       }
       

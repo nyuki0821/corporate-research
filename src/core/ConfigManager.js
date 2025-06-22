@@ -26,7 +26,7 @@ var ConfigManager = (function() {
     'OPENAI_API_KEY': '',
     
     // バッチ処理設定
-    'BATCH_SIZE': '20',
+    'BATCH_SIZE': '8', // Google Apps Script 6分制限に対応（1社40秒×8社=320秒）
     'MAX_RETRY_COUNT': '3',
     'RETRY_DELAY_MS': '1000',
     'PROCESSING_DELAY_MS': '2000',
@@ -43,7 +43,7 @@ var ConfigManager = (function() {
     // システム設定
     'LOG_RETENTION_DAYS': '30',
     'ERROR_THRESHOLD': '5',
-    'BATCH_SIZE_THRESHOLD': '50',
+    'BATCH_SIZE_THRESHOLD': '8', // 実行時間制限に合わせて調整
     'ENABLE_DEBUG_MODE': 'false',
     
     // 検索・抽出設定

@@ -252,11 +252,11 @@ var ProductionTests = (function() {
     console.log('📦 小規模バッチ処理テスト開始');
     
     try {
-      // テスト用企業リスト（中堅企業）
+      // テスト用企業リスト（教育業界の中堅企業）
       var testCompanies = [
-        '株式会社スターバックス コーヒー ジャパン',
-        '大和ハウス工業株式会社',
-        '株式会社ニトリホールディングス'
+        '株式会社ベネッセホールディングス',
+        '株式会社学研ホールディングス',
+        '株式会社栄光ホールディングス'
       ];
       
       console.log('バッチ処理対象:', testCompanies.length + '社');
@@ -276,6 +276,96 @@ var ProductionTests = (function() {
       console.log('失敗:', failCount + '社');
       console.log('処理時間:', duration + 'ms');
       console.log('平均処理時間:', Math.round(duration / testCompanies.length) + 'ms/社');
+      
+      // 各企業の詳細結果を表示
+      console.log('\n📊 各企業の詳細結果:');
+      console.log('================================');
+      
+      results.forEach(function(result, index) {
+        console.log('\n🏢 企業' + (index + 1) + ': ' + result.companyName);
+        
+        if (result.success && result.company) {
+          var company = result.company;
+          
+          // 基本情報
+          console.log('✅ 調査成功！');
+          console.log('企業名:', company.companyName || 'N/A');
+          console.log('本社所在地:', (company.prefecture || '') + (company.city || ''));
+          console.log('信頼性スコア:', (company.reliabilityScore || 0) + '%');
+          console.log('取得フィールド数:', getFieldCount(company));
+          
+          // カラム検証
+          var validation = validateCompanyDataColumns(company);
+          console.log('\n📊 カラム検証結果:');
+          console.log('本社情報シート完成度:', validation.headquarters.completionRate + '%');
+          console.log('取得済みフィールド:', validation.headquarters.completedFields + '/' + validation.headquarters.totalFields);
+          
+          if (validation.headquarters.missingFields.length > 0) {
+            console.log('❌ 未取得フィールド:', validation.headquarters.missingFields.join(', '));
+          }
+          
+          // 支店情報
+          if (result.branches && result.branches.length > 0) {
+            console.log('支店情報:', result.branches.length + '件取得');
+            result.branches.forEach(function(branch, branchIndex) {
+              console.log('  支店' + (branchIndex + 1) + ':', branch.name + ' (' + branch.type + ')');
+              if (branch.prefecture && branch.city) {
+                console.log('    所在地:', branch.prefecture + branch.city);
+              }
+              if (branch.phone) {
+                console.log('    電話番号:', branch.phone);
+              }
+            });
+          } else {
+            console.log('支店情報: 取得されませんでした');
+          }
+          
+          // ニュースサマリー
+          if (result.newsSummary) {
+            console.log('\n=== 最新ニュースサマリー ===');
+            console.log('概要:', result.newsSummary.summary);
+            console.log('営業への影響:', result.newsSummary.businessImpact);
+            console.log('情報ソース数:', result.newsSummary.sourceCount + '件');
+            
+            if (result.newsSummary.keyPoints && result.newsSummary.keyPoints.length > 0) {
+              console.log('重要ポイント:');
+              result.newsSummary.keyPoints.forEach(function(point, pointIndex) {
+                console.log('  ' + (pointIndex + 1) + '. ' + point);
+              });
+            }
+          }
+          
+          // 採用情報サマリー
+          if (result.recruitmentSummary) {
+            console.log('\n=== 採用情報サマリー ===');
+            console.log('概要:', result.recruitmentSummary.summary);
+            console.log('企業成長性:', result.recruitmentSummary.companyGrowth);
+            console.log('営業機会:', result.recruitmentSummary.businessOpportunity);
+            console.log('情報ソース数:', result.recruitmentSummary.sourceCount + '件');
+            
+            if (result.recruitmentSummary.recruitmentTypes && result.recruitmentSummary.recruitmentTypes.length > 0) {
+              console.log('採用種別:', result.recruitmentSummary.recruitmentTypes.join(', '));
+            }
+            
+            if (result.recruitmentSummary.targetPositions && result.recruitmentSummary.targetPositions.length > 0) {
+              console.log('募集職種:', result.recruitmentSummary.targetPositions.join(', '));
+            }
+            
+            if (result.recruitmentSummary.keyInsights && result.recruitmentSummary.keyInsights.length > 0) {
+              console.log('営業活用ポイント:');
+              result.recruitmentSummary.keyInsights.forEach(function(insight, insightIndex) {
+                console.log('  ' + (insightIndex + 1) + '. ' + insight);
+              });
+            }
+          }
+          
+        } else {
+          console.log('❌ 調査失敗');
+          console.log('エラー:', result.error || 'Unknown error');
+        }
+        
+        console.log('--------------------------------');
+      });
       
       return {
         success: successCount > 0,
@@ -501,6 +591,31 @@ var ProductionTests = (function() {
     return results;
   }
   
+  /**
+   * 企業データのフィールド数をカウント
+   * @private
+   */
+  function getFieldCount(company) {
+    if (!company) return 0;
+    
+    var fields = [
+      'companyName', 'officialName', 'phone', 'industryLarge', 'industryMedium',
+      'employees', 'establishedYear', 'capital', 'listingStatus',
+      'postalCode', 'prefecture', 'city', 'addressDetail',
+      'representativeName', 'representativeTitle',
+      'philosophy', 'latestNews', 'recruitmentStatus', 'website'
+    ];
+    
+    var count = 0;
+    fields.forEach(function(field) {
+      if (company[field] && company[field] !== null && company[field] !== '') {
+        count++;
+      }
+    });
+    
+    return count;
+  }
+
   /**
    * 企業データのカラム検証を実行
    * @private
@@ -771,6 +886,9 @@ var ProductionTests = (function() {
           success: result.success,
           companyName: companyName,
           company: result.success ? result.company : null,
+          branches: result.success ? result.branches : null,
+          newsSummary: result.success ? result.newsSummary : null,
+          recruitmentSummary: result.success ? result.recruitmentSummary : null,
           error: result.success ? null : result.error
         });
       } catch (error) {
@@ -778,6 +896,9 @@ var ProductionTests = (function() {
           success: false,
           companyName: companyName,
           company: null,
+          branches: null,
+          newsSummary: null,
+          recruitmentSummary: null,
           error: error.toString()
         });
       }

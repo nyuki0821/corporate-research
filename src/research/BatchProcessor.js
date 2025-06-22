@@ -135,22 +135,84 @@ var BatchProcessor = (function() {
           var result = CompanyResearchService.researchCompany(company.name, company.phone);
           
           if (result.success) {
-            // Save to spreadsheet
-            if (typeof SpreadsheetService !== 'undefined') {
-              SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了', '');
-              SpreadsheetService.saveHeadquartersInfo(result.company);
-              
-              if (result.branches && result.branches.length > 0) {
-                SpreadsheetService.saveBranchesInfo(result.company.id, result.branches);
+            // トランザクション的な保存処理
+            try {
+              if (typeof SpreadsheetService !== 'undefined') {
+                // 1. まず処理中ステータスに更新（既に処理中の場合はスキップ）
+                var currentStatus = SpreadsheetService.getCompanyStatus(company.rowIndex);
+                if (currentStatus !== '処理中') {
+                  SpreadsheetService.updateCompanyStatus(company.rowIndex, '処理中', '');
+                }
+                
+                // 2. すべてのデータ保存を実行
+                var saveSuccess = true;
+                var saveError = null;
+                
+                try {
+                  // 本社情報を保存
+                  if (!SpreadsheetService.saveHeadquartersInfo(result.company)) {
+                    throw new Error('Failed to save headquarters info');
+                  }
+                  
+                  // 支店情報を保存（存在する場合）
+                  if (result.branches && result.branches.length > 0) {
+                    if (!SpreadsheetService.saveBranchesInfo(result.company.id, result.branches)) {
+                      throw new Error('Failed to save branches info');
+                    }
+                  }
+                  
+                  // ニュースサマリーを保存（存在する場合）
+                  if (result.newsSummary) {
+                    if (!SpreadsheetService.saveNewsSummary(result.company.id, result.newsSummary)) {
+                      throw new Error('Failed to save news summary');
+                    }
+                  }
+                  
+                  // 採用情報サマリーを保存（存在する場合）
+                  if (result.recruitmentSummary) {
+                    if (!SpreadsheetService.saveRecruitmentSummary(result.company.id, result.recruitmentSummary)) {
+                      throw new Error('Failed to save recruitment summary');
+                    }
+                  }
+                  
+                } catch (saveErr) {
+                  saveSuccess = false;
+                  saveError = saveErr;
+                }
+                
+                // 3. 保存結果に応じてステータスを更新
+                if (saveSuccess) {
+                  SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了', '');
+                  Logger.logInfo('Company data saved successfully: ' + company.name);
+                } else {
+                  SpreadsheetService.updateCompanyStatus(company.rowIndex, 'エラー', 'データ保存失敗: ' + saveError.message);
+                  throw saveError;
+                }
               }
+              
+              updateStats(true);
+              resolve({
+                success: true,
+                company: company,
+                data: result
+              });
+              
+            } catch (saveError) {
+              Logger.logError('Failed to save company data: ' + company.name, saveError);
+              
+              // 保存エラーの場合はステータスをエラーに設定
+              if (typeof SpreadsheetService !== 'undefined') {
+                SpreadsheetService.updateCompanyStatus(company.rowIndex, 'エラー', 'データ保存エラー: ' + saveError.message);
+              }
+              
+              updateStats(false);
+              resolve({
+                success: false,
+                company: company,
+                error: saveError
+              });
             }
             
-            updateStats(true);
-            resolve({
-              success: true,
-              company: company,
-              data: result
-            });
           } else {
             throw new Error(result.error || 'Research failed');
           }

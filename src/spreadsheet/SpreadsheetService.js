@@ -353,7 +353,16 @@ var SpreadsheetService = (function() {
         error: row[4]
       };
 
-      if (!status || company.status === status) {
+      // ステータスフィルタリング
+      if (!status) {
+        companies.push(company);
+      } else if (status === '未処理') {
+        // 「未処理」を指定した場合は、「未処理」と「処理中」の両方を含める
+        // 「処理中」は前回のバッチでタイムアウトした可能性があるため
+        if (company.status === '未処理' || company.status === '処理中') {
+          companies.push(company);
+        }
+      } else if (company.status === status) {
         companies.push(company);
       }
     }
@@ -362,16 +371,39 @@ var SpreadsheetService = (function() {
   }
 
   /**
+   * Get company status
+   */
+  function getCompanyStatus(rowIndex) {
+    try {
+      var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.COMPANY_LIST || '企業リスト');
+      if (!sheet) return '未処理';
+      
+      var statusCell = sheet.getRange(rowIndex, 3);
+      var status = statusCell.getValue();
+      return status || '未処理';
+    } catch (error) {
+      Logger.logError('Failed to get company status', error);
+      return '未処理';
+    }
+  }
+
+  /**
    * Update company status
    */
   function updateCompanyStatus(rowIndex, status, error) {
-    if (!error) error = '';
-    
-    var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.COMPANY_LIST || '企業リスト');
-    if (!sheet) return;
+    try {
+      if (!error) error = '';
+      
+      var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.COMPANY_LIST || '企業リスト');
+      if (!sheet) return false;
 
-    var range = sheet.getRange(rowIndex, 3, 1, 3);
-    range.setValues([[status, new Date(), error]]);
+      var range = sheet.getRange(rowIndex, 3, 1, 3);
+      range.setValues([[status, new Date(), error]]);
+      return true;
+    } catch (err) {
+      Logger.logError('Failed to update company status', err);
+      return false;
+    }
   }
 
   /**
@@ -441,6 +473,61 @@ var SpreadsheetService = (function() {
   }
 
   /**
+   * Save news summary
+   */
+  function saveNewsSummary(companyId, newsSummary) {
+    try {
+      // ニュースサマリーは本社情報シートの対応する行に保存
+      var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.HEADQUARTERS || '本社情報');
+      if (!sheet) throw new Error('Headquarters sheet not found');
+
+      var existingRow = findCompanyRow(sheet, companyId);
+      if (existingRow > 0) {
+        // 最新ニュース列に保存（18列目）
+        var newsText = newsSummary.summary || '';
+        if (newsSummary.keyPoints && newsSummary.keyPoints.length > 0) {
+          newsText += '\n重要ポイント: ' + newsSummary.keyPoints.join(', ');
+        }
+        sheet.getRange(existingRow, 18).setValue(newsText);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      Logger.logError('Failed to save news summary', error);
+      return false;
+    }
+  }
+
+  /**
+   * Save recruitment summary
+   */
+  function saveRecruitmentSummary(companyId, recruitmentSummary) {
+    try {
+      // 採用情報サマリーは本社情報シートの対応する行に保存
+      var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.HEADQUARTERS || '本社情報');
+      if (!sheet) throw new Error('Headquarters sheet not found');
+
+      var existingRow = findCompanyRow(sheet, companyId);
+      if (existingRow > 0) {
+        // 採用状況列に保存（19列目）
+        var recruitmentText = recruitmentSummary.summary || '';
+        if (recruitmentSummary.companyGrowth) {
+          recruitmentText += '\n成長性: ' + recruitmentSummary.companyGrowth;
+        }
+        if (recruitmentSummary.businessOpportunity) {
+          recruitmentText += '\n営業機会: ' + recruitmentSummary.businessOpportunity;
+        }
+        sheet.getRange(existingRow, 19).setValue(recruitmentText);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      Logger.logError('Failed to save recruitment summary', error);
+      return false;
+    }
+  }
+
+  /**
    * Record processing status
    */
   function recordProcessingStatus(status) {
@@ -490,9 +577,12 @@ var SpreadsheetService = (function() {
     getSpreadsheetInfo: getSpreadsheetInfo,
     initializeSheets: initializeSheets,
     getCompanyList: getCompanyList,
+    getCompanyStatus: getCompanyStatus,
     updateCompanyStatus: updateCompanyStatus,
     saveHeadquartersInfo: saveHeadquartersInfo,
     saveBranchesInfo: saveBranchesInfo,
+    saveNewsSummary: saveNewsSummary,
+    saveRecruitmentSummary: saveRecruitmentSummary,
     recordProcessingStatus: recordProcessingStatus,
     exportData: exportData,
     getCompanyBatch: getCompanyBatch,
