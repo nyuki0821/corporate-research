@@ -195,8 +195,8 @@ var CompanyResearchService = (function() {
       
       // Search using company name
       var companySearchResult = TavilyClient.searchCompany(companyName, {
-        additionalTerms: '本社 設立 従業員数 資本金',
-        max_results: 8
+        additionalTerms: '本社 設立 従業員数 資本金 代表取締役 電話番号 郵便番号 企業理念 採用情報 支店 営業所 事業所 支社',
+        max_results: 10
       });
       searchResults.push(companySearchResult);
 
@@ -204,6 +204,24 @@ var CompanyResearchService = (function() {
       if (phoneNumber && phoneNumber.trim() !== '') {
         var phoneSearchResult = TavilyClient.searchByPhoneNumber(phoneNumber);
         searchResults.push(phoneSearchResult);
+      }
+
+      // Additional search for branch/office information
+      var branchSearchResult = TavilyClient.searchCompanyDetails(companyName, 'branches');
+      if (branchSearchResult.success) {
+        searchResults.push(branchSearchResult);
+      }
+
+      // Additional search for latest news
+      var newsSearchResult = TavilyClient.searchCompanyDetails(companyName, 'news');
+      if (newsSearchResult.success) {
+        searchResults.push(newsSearchResult);
+      }
+
+      // Additional search for recruitment information
+      var recruitmentSearchResult = TavilyClient.searchCompanyDetails(companyName, 'recruitment');
+      if (recruitmentSearchResult.success) {
+        searchResults.push(recruitmentSearchResult);
       }
 
       // Combine search results
@@ -269,9 +287,82 @@ var CompanyResearchService = (function() {
         sourceUrls: combinedResults.results.map(function(r) { return r.url; }).slice(0, 5)
       });
 
-      // Create company object
+      // Extract branch information if available
+      var branches = [];
+      if (extractionResult.data.branches && Array.isArray(extractionResult.data.branches)) {
+        branches = extractionResult.data.branches.map(function(branch) {
+          return {
+            companyId: companyId,
+            name: branch.name || '',
+            type: branch.type || 'その他',
+            phone: branch.phone || '',
+            postalCode: branch.postalCode || '',
+            prefecture: branch.prefecture || '',
+            city: branch.city || '',
+            addressDetail: branch.addressDetail || '',
+            employees: branch.employees || null,
+            businessHours: branch.businessHours || '',
+            notes: branch.notes || ''
+          };
+        });
+      }
+
+      // Generate news summary if news search was successful
+      var newsSummary = null;
+      if (newsSearchResult && newsSearchResult.success) {
+        var newsResult = OpenAIClient.generateNewsSummary(companyName, newsSearchResult);
+        if (newsResult.success) {
+          newsSummary = {
+            summary: newsResult.data.summary,
+            keyPoints: newsResult.data.keyPoints,
+            businessImpact: newsResult.data.businessImpact,
+            sourceCount: newsResult.data.sourceCount,
+            lastUpdated: newsResult.data.lastUpdated,
+            sourceUrls: newsResult.data.sourceUrls
+          };
+          
+          // Update company data with news information
+          enhancedData.latestNews = newsSummary.summary;
+          if (newsSummary.sourceUrls.length > 0) {
+            enhancedData.sourceUrls = enhancedData.sourceUrls.concat(newsSummary.sourceUrls.slice(0, 3));
+          }
+        }
+      }
+
+      // Generate recruitment summary if recruitment search was successful
+      var recruitmentSummary = null;
+      if (recruitmentSearchResult && recruitmentSearchResult.success) {
+        var recruitmentResult = OpenAIClient.generateRecruitmentSummary(companyName, recruitmentSearchResult);
+        if (recruitmentResult.success) {
+          recruitmentSummary = {
+            summary: recruitmentResult.data.summary,
+            recruitmentTypes: recruitmentResult.data.recruitmentTypes,
+            targetPositions: recruitmentResult.data.targetPositions,
+            companyGrowth: recruitmentResult.data.companyGrowth,
+            businessOpportunity: recruitmentResult.data.businessOpportunity,
+            keyInsights: recruitmentResult.data.keyInsights,
+            sourceCount: recruitmentResult.data.sourceCount,
+            lastUpdated: recruitmentResult.data.lastUpdated,
+            recruitmentUrl: recruitmentResult.data.recruitmentUrl,
+            sourceUrls: recruitmentResult.data.sourceUrls
+          };
+          
+          // Update company data with recruitment information
+          enhancedData.recruitmentStatus = recruitmentSummary.summary;
+          if (recruitmentSummary.sourceUrls.length > 0) {
+            enhancedData.sourceUrls = enhancedData.sourceUrls.concat(recruitmentSummary.sourceUrls.slice(0, 2));
+          }
+        }
+      }
+
+      // Create company object with news summary
+      var companyData = Object.assign({}, enhancedData, {
+        newsSummary: newsSummary,
+        recruitmentSummary: recruitmentSummary
+      });
+      
       var company = createCompanyObject(
-        enhancedData,
+        companyData,
         companyId,
         enhancedData.sourceUrls
       );
@@ -288,13 +379,19 @@ var CompanyResearchService = (function() {
       return {
         success: true,
         company: company,
+        branches: branches,
+        newsSummary: newsSummary,
+        recruitmentSummary: recruitmentSummary,
         searchValidation: validation,
         extractionResult: extractionResult,
         processingTime: duration,
         metadata: {
           searchResultCount: combinedResults.results.length,
           confidence: validation.confidence,
-          reliabilityScore: reliabilityScore
+          reliabilityScore: reliabilityScore,
+          branchCount: branches.length,
+          newsSourceCount: newsSummary ? newsSummary.sourceCount : 0,
+          recruitmentSourceCount: recruitmentSummary ? recruitmentSummary.sourceCount : 0
         }
       };
 

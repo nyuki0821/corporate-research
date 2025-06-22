@@ -122,8 +122,8 @@ var ProductionTests = (function() {
     console.log('🏢 単一企業調査テスト開始');
     
     try {
-      // 実在する大手企業でテスト（確実に情報が取得できる企業を選択）
-      var companyName = 'トヨタ自動車株式会社';
+      // 営業先として重要な支店・営業所を持つ企業でテスト
+      var companyName = '大和ハウス工業株式会社';
       
       console.log('調査対象:', companyName);
       console.log('調査開始...');
@@ -140,11 +140,92 @@ var ProductionTests = (function() {
         console.log('処理時間:', duration + 'ms');
         console.log('取得フィールド数:', Object.keys(result.company).length);
         
+        // 詳細なカラム検証を実行
+        var validation = validateCompanyDataColumns(result.company);
+        console.log('\n📊 カラム検証結果:');
+        console.log('本社情報シート完成度:', validation.headquarters.completionRate + '%');
+        console.log('取得済みフィールド:', validation.headquarters.completedFields + '/' + validation.headquarters.totalFields);
+        
+        if (validation.headquarters.missingFields.length > 0) {
+          console.log('❌ 未取得フィールド:', validation.headquarters.missingFields.join(', '));
+        }
+        
+        if (result.branches && result.branches.length > 0) {
+          console.log('支店情報:', result.branches.length + '件取得');
+          
+          // 支店情報の詳細を表示
+          result.branches.forEach(function(branch, index) {
+            console.log('  支店' + (index + 1) + ':', branch.name, '(' + branch.type + ')');
+            if (branch.prefecture && branch.city) {
+              console.log('    所在地:', branch.prefecture + branch.city);
+            }
+            if (branch.phone) {
+              console.log('    電話番号:', branch.phone);
+            }
+          });
+        } else {
+          console.log('支店情報: 取得なし');
+        }
+
+        // ニュースサマリーの表示
+        if (result.newsSummary) {
+          console.log('\n=== 最新ニュースサマリー ===');
+          console.log('概要:', result.newsSummary.summary);
+          console.log('営業への影響:', result.newsSummary.businessImpact);
+          console.log('情報ソース数:', result.newsSummary.sourceCount + '件');
+          
+          if (result.newsSummary.keyPoints && result.newsSummary.keyPoints.length > 0) {
+            console.log('重要ポイント:');
+            result.newsSummary.keyPoints.forEach(function(point, index) {
+              console.log('  ' + (index + 1) + '. ' + point);
+            });
+          }
+          
+          if (result.newsSummary.lastUpdated) {
+            console.log('最終更新:', result.newsSummary.lastUpdated);
+          }
+        }
+
+        if (result.recruitmentSummary) {
+          console.log('\n=== 採用情報サマリー ===');
+          console.log('概要:', result.recruitmentSummary.summary);
+          console.log('企業成長性:', result.recruitmentSummary.companyGrowth);
+          console.log('営業機会:', result.recruitmentSummary.businessOpportunity);
+          console.log('情報ソース数:', result.recruitmentSummary.sourceCount + '件');
+          
+          if (result.recruitmentSummary.recruitmentTypes && result.recruitmentSummary.recruitmentTypes.length > 0) {
+            console.log('採用種別:', result.recruitmentSummary.recruitmentTypes.join(', '));
+          }
+          
+          if (result.recruitmentSummary.targetPositions && result.recruitmentSummary.targetPositions.length > 0) {
+            console.log('募集職種:', result.recruitmentSummary.targetPositions.join(', '));
+          }
+          
+          if (result.recruitmentSummary.keyInsights && result.recruitmentSummary.keyInsights.length > 0) {
+            console.log('営業活用ポイント:');
+            result.recruitmentSummary.keyInsights.forEach(function(insight, index) {
+              console.log('  ' + (index + 1) + '. ' + insight);
+            });
+          }
+          
+          if (result.recruitmentSummary.recruitmentUrl) {
+            console.log('採用ページ:', result.recruitmentSummary.recruitmentUrl);
+          }
+          
+          if (result.recruitmentSummary.lastUpdated) {
+            console.log('最終更新:', result.recruitmentSummary.lastUpdated);
+          }
+        }
+        
+        // 詳細レポートを表示（支店情報とニュースサマリーも含める）
+        displayDetailedValidationReport(validation, result.branches, result.newsSummary, result.recruitmentSummary);
+        
         return {
           success: true,
           company: result.company,
           duration: duration,
-          fieldCount: Object.keys(result.company).length
+          fieldCount: Object.keys(result.company).length,
+          validation: validation
         };
       } else {
         console.log('❌ 調査失敗:', result.error);
@@ -171,11 +252,11 @@ var ProductionTests = (function() {
     console.log('📦 小規模バッチ処理テスト開始');
     
     try {
-      // テスト用企業リスト（実在企業）
+      // テスト用企業リスト（中堅企業）
       var testCompanies = [
-        'ソニーグループ株式会社',
-        '株式会社ファーストリテイリング', 
-        '任天堂株式会社'
+        '株式会社スターバックス コーヒー ジャパン',
+        '大和ハウス工業株式会社',
+        '株式会社ニトリホールディングス'
       ];
       
       console.log('バッチ処理対象:', testCompanies.length + '社');
@@ -420,6 +501,264 @@ var ProductionTests = (function() {
     return results;
   }
   
+  /**
+   * 企業データのカラム検証を実行
+   * @private
+   */
+  function validateCompanyDataColumns(company) {
+    // 本社情報シートのカラム定義（Constants.SHEET_CONFIG.HEADQUARTERS_COLUMNSに基づく）
+    var headquartersFields = [
+      { key: 'id', name: '企業ID', required: true },
+      { key: 'companyName', name: '企業名', required: true },
+      { key: 'officialName', name: '正式企業名', required: false },
+      { key: 'phone', name: '電話番号', required: false },
+      { key: 'industryLarge', name: '業種大分類', required: false },
+      { key: 'industryMedium', name: '業種中分類', required: false },
+      { key: 'employees', name: '従業員数', required: false },
+      { key: 'establishedYear', name: '設立年', required: false },
+      { key: 'capital', name: '資本金', required: false },
+      { key: 'listingStatus', name: '上場区分', required: false },
+      { key: 'postalCode', name: '本社郵便番号', required: false },
+      { key: 'prefecture', name: '本社都道府県', required: false },
+      { key: 'city', name: '本社市区町村', required: false },
+      { key: 'addressDetail', name: '本社住所詳細', required: false },
+      { key: 'representativeName', name: '代表者名', required: false },
+      { key: 'representativeTitle', name: '代表者役職', required: false },
+      { key: 'philosophy', name: '企業理念', required: false },
+      { key: 'latestNews', name: '最新ニュース', required: false },
+      { key: 'recruitmentStatus', name: '採用状況', required: false },
+      { key: 'website', name: '企業URL', required: false },
+      { key: 'reliabilityScore', name: '信頼性スコア', required: false },
+      { key: 'processedAt', name: '処理日時', required: false },
+      { key: 'processingResult', name: '処理結果', required: false },
+      { key: 'errorMessage', name: 'エラー内容', required: false },
+      { key: 'sourceUrls', name: '情報ソースURL', required: false }
+    ];
+
+    var validation = {
+      headquarters: {
+        totalFields: headquartersFields.length,
+        completedFields: 0,
+        requiredFields: 0,
+        completedRequiredFields: 0,
+        completionRate: 0,
+        requiredCompletionRate: 0,
+        missingFields: [],
+        missingRequiredFields: [],
+        fieldDetails: []
+      },
+      branches: {
+        available: false,
+        count: 0,
+        completionRate: 0,
+        fieldDetails: []
+      }
+    };
+
+    // 本社情報の検証
+    headquartersFields.forEach(function(field) {
+      var value = company[field.key];
+      var hasValue = value !== null && value !== undefined && value !== '';
+      
+      if (field.required) {
+        validation.headquarters.requiredFields++;
+        if (hasValue) {
+          validation.headquarters.completedRequiredFields++;
+        } else {
+          validation.headquarters.missingRequiredFields.push(field.name);
+        }
+      }
+
+      if (hasValue) {
+        validation.headquarters.completedFields++;
+      } else {
+        validation.headquarters.missingFields.push(field.name);
+      }
+
+      validation.headquarters.fieldDetails.push({
+        key: field.key,
+        name: field.name,
+        required: field.required,
+        hasValue: hasValue,
+        value: hasValue ? (typeof value === 'string' && value.length > 50 ? value.substring(0, 50) + '...' : value) : null
+      });
+    });
+
+    // 完成度計算
+    validation.headquarters.completionRate = Math.round(
+      (validation.headquarters.completedFields / validation.headquarters.totalFields) * 100
+    );
+    
+    if (validation.headquarters.requiredFields > 0) {
+      validation.headquarters.requiredCompletionRate = Math.round(
+        (validation.headquarters.completedRequiredFields / validation.headquarters.requiredFields) * 100
+      );
+    }
+
+    // 支店情報の検証（もし存在する場合）
+    if (company.branches && Array.isArray(company.branches) && company.branches.length > 0) {
+      validation.branches.available = true;
+      validation.branches.count = company.branches.length;
+      
+      var branchFields = ['name', 'type', 'phone', 'address', 'prefecture', 'city'];
+      var totalBranchFields = branchFields.length * company.branches.length;
+      var completedBranchFields = 0;
+
+      company.branches.forEach(function(branch, index) {
+        branchFields.forEach(function(field) {
+          var value = branch[field];
+          if (value !== null && value !== undefined && value !== '') {
+            completedBranchFields++;
+          }
+        });
+      });
+
+      validation.branches.completionRate = Math.round(
+        (completedBranchFields / totalBranchFields) * 100
+      );
+    }
+
+    return validation;
+  }
+
+  /**
+   * 詳細な検証レポートを表示
+   * @private
+   */
+  function displayDetailedValidationReport(validation, branches, newsSummary, recruitmentSummary) {
+    console.log('\n📋 詳細カラム検証レポート:');
+    console.log('================================');
+    
+    console.log('\n【本社情報シート】');
+    console.log('総フィールド数:', validation.headquarters.totalFields);
+    console.log('取得済みフィールド数:', validation.headquarters.completedFields);
+    console.log('完成度:', validation.headquarters.completionRate + '%');
+    
+    if (validation.headquarters.requiredFields > 0) {
+      console.log('必須フィールド完成度:', validation.headquarters.requiredCompletionRate + '%');
+    }
+
+    // 取得済みフィールドの詳細
+    console.log('\n✅ 取得済みフィールド:');
+    validation.headquarters.fieldDetails
+      .filter(function(field) { return field.hasValue; })
+      .forEach(function(field) {
+        var valueDisplay = field.value;
+        if (typeof valueDisplay === 'object' && valueDisplay !== null) {
+          valueDisplay = JSON.stringify(valueDisplay);
+        }
+        console.log('  • ' + field.name + ': ' + valueDisplay);
+      });
+
+    // 未取得フィールドの詳細
+    if (validation.headquarters.missingFields.length > 0) {
+      console.log('\n❌ 未取得フィールド:');
+      validation.headquarters.fieldDetails
+        .filter(function(field) { return !field.hasValue; })
+        .forEach(function(field) {
+          var marker = field.required ? '【必須】' : '';
+          console.log('  • ' + field.name + ' ' + marker);
+        });
+    }
+
+    // 支店情報
+    console.log('\n【支店情報シート】');
+    if (branches && branches.length > 0) {
+      console.log('支店数:', branches.length);
+      console.log('支店情報: 取得成功');
+      
+      branches.forEach(function(branch, index) {
+        console.log('\n支店' + (index + 1) + '詳細:');
+        console.log('  • 支店名:', branch.name);
+        console.log('  • 種別:', branch.type);
+        if (branch.phone) console.log('  • 電話番号:', branch.phone);
+        if (branch.postalCode) console.log('  • 郵便番号:', branch.postalCode);
+        if (branch.prefecture && branch.city) {
+          console.log('  • 所在地:', branch.prefecture + branch.city);
+        }
+        if (branch.addressDetail) console.log('  • 住所詳細:', branch.addressDetail);
+        if (branch.businessHours) console.log('  • 営業時間:', branch.businessHours);
+        if (branch.employees) console.log('  • 従業員数:', branch.employees);
+        if (branch.notes) console.log('  • 備考:', branch.notes);
+      });
+    } else {
+      console.log('支店情報: 取得されませんでした');
+    }
+
+    // ニュースサマリー情報
+    console.log('\n【最新ニュースサマリー】');
+    if (newsSummary) {
+      console.log('ニュースサマリー: 取得成功');
+      console.log('概要:', newsSummary.summary);
+      console.log('営業への影響:', newsSummary.businessImpact);
+      console.log('情報ソース数:', newsSummary.sourceCount);
+      
+      if (newsSummary.keyPoints && newsSummary.keyPoints.length > 0) {
+        console.log('\n重要ポイント:');
+        newsSummary.keyPoints.forEach(function(point, index) {
+          console.log('  ' + (index + 1) + '. ' + point);
+        });
+      }
+      
+      if (newsSummary.lastUpdated) {
+        console.log('最終更新日:', newsSummary.lastUpdated);
+      }
+      
+      if (newsSummary.sourceUrls && newsSummary.sourceUrls.length > 0) {
+        console.log('\n参考URL:');
+        newsSummary.sourceUrls.slice(0, 3).forEach(function(url, index) {
+          console.log('  ' + (index + 1) + '. ' + url);
+        });
+      }
+    } else {
+      console.log('ニュースサマリー: 取得されませんでした');
+    }
+
+    // 採用情報サマリー
+    console.log('\n【採用情報サマリー】');
+    if (recruitmentSummary) {
+      console.log('採用サマリー: 取得成功');
+      console.log('概要:', recruitmentSummary.summary);
+      console.log('企業成長性:', recruitmentSummary.companyGrowth);
+      console.log('営業機会:', recruitmentSummary.businessOpportunity);
+      console.log('情報ソース数:', recruitmentSummary.sourceCount);
+      
+      if (recruitmentSummary.recruitmentTypes && recruitmentSummary.recruitmentTypes.length > 0) {
+        console.log('採用種別:', recruitmentSummary.recruitmentTypes.join(', '));
+      }
+      
+      if (recruitmentSummary.targetPositions && recruitmentSummary.targetPositions.length > 0) {
+        console.log('募集職種:', recruitmentSummary.targetPositions.join(', '));
+      }
+      
+      if (recruitmentSummary.keyInsights && recruitmentSummary.keyInsights.length > 0) {
+        console.log('\n営業活用ポイント:');
+        recruitmentSummary.keyInsights.forEach(function(insight, index) {
+          console.log('  ' + (index + 1) + '. ' + insight);
+        });
+      }
+      
+      if (recruitmentSummary.recruitmentUrl) {
+        console.log('採用ページ:', recruitmentSummary.recruitmentUrl);
+      }
+      
+      if (recruitmentSummary.lastUpdated) {
+        console.log('最終更新日:', recruitmentSummary.lastUpdated);
+      }
+      
+      if (recruitmentSummary.sourceUrls && recruitmentSummary.sourceUrls.length > 0) {
+        console.log('\n参考URL:');
+        recruitmentSummary.sourceUrls.slice(0, 3).forEach(function(url, index) {
+          console.log('  ' + (index + 1) + '. ' + url);
+        });
+      }
+    } else {
+      console.log('採用サマリー: 取得されませんでした');
+    }
+
+    console.log('\n================================');
+  }
+
   // BatchProcessor用のヘルパー関数（同期版）
   function processSpecificCompanies(companyNames) {
     var results = [];

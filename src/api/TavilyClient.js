@@ -99,7 +99,7 @@ var TavilyClient = (function() {
       var searchOptions = buildSearchOptions(options);
       
       // Build search query for company
-      var query = companyName + ' 会社 企業情報 本社 設立 資本金 従業員数';
+      var query = companyName + ' 会社 企業情報 本社 設立 資本金 従業員数 代表取締役 電話番号 企業理念 採用情報 支店 営業所 事業所';
       if (options && options.additionalTerms) {
         query += ' ' + options.additionalTerms;
       }
@@ -156,7 +156,7 @@ var TavilyClient = (function() {
       'financial': companyName + ' 財務情報 売上 利益 決算',
       'news': companyName + ' 最新ニュース 発表 プレスリリース',
       'recruitment': companyName + ' 採用情報 新卒採用 中途採用',
-      'branches': companyName + ' 支店 営業所 店舗 拠点',
+      'branches': companyName + ' 支店 営業所 事業所 支社 拠点 オフィス 工場 -店舗 -ショップ -販売店',
       'corporate': companyName + ' 企業理念 経営方針 代表者'
     };
 

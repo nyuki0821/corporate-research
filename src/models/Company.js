@@ -54,6 +54,12 @@ var Company = (function() {
     this.recruitmentStatus = data.recruitmentStatus || '';
     this.website = data.website || '';
     
+    // News summary information (optional extended data)
+    this.newsSummary = data.newsSummary || null;
+    
+    // Recruitment summary information (optional extended data)
+    this.recruitmentSummary = data.recruitmentSummary || null;
+    
     // Metadata
     this.reliabilityScore = data.reliabilityScore || 0;
     this.processedAt = data.processedAt || new Date().toISOString();
