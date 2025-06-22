@@ -16,6 +16,27 @@ var TavilyClient = (function() {
 
   // Private functions
   /**
+   * Extract potential domain from company name
+   * @private
+   */
+  function extractDomainFromCompanyName(companyName) {
+    // Remove common company suffixes and convert to potential domain
+    var cleanName = companyName
+      .replace(/株式会社|有限会社|合同会社|合資会社|一般社団法人|公益社団法人/g, '')
+      .replace(/\s+/g, '')
+      .toLowerCase();
+    
+    // Try common domain patterns
+    var possibleDomains = [
+      cleanName + '.co.jp',
+      cleanName + '.com',
+      cleanName + '.jp'
+    ];
+    
+    return possibleDomains[0]; // Return the most likely domain
+  }
+
+  /**
    * Get API key
    * @private
    */
@@ -38,7 +59,7 @@ var TavilyClient = (function() {
       search_depth: 'advanced',
       include_answer: true,
       include_images: false,
-      include_raw_content: false,
+      include_raw_content: true,
       max_results: ConfigManager.getNumber('MAX_SEARCH_RESULTS', 10),
       include_domains: [],
       exclude_domains: []
@@ -71,10 +92,16 @@ var TavilyClient = (function() {
     }
 
     var formattedResults = response.results.map(function(result) {
+      // Combine content and raw_content for more comprehensive information
+      var combinedContent = result.content || '';
+      if (result.raw_content && result.raw_content !== result.content) {
+        combinedContent += '\n\n--- Raw Content ---\n' + result.raw_content;
+      }
+      
       return {
         title: result.title || '',
         url: result.url || '',
-        content: result.content || '',
+        content: combinedContent,
         score: result.score || 0,
         published_date: result.published_date || null
       };
@@ -99,7 +126,7 @@ var TavilyClient = (function() {
       var searchOptions = buildSearchOptions(options);
       
       // Build search query for company
-      var query = companyName + ' 会社 企業情報 本社 設立 資本金 従業員数 代表取締役 電話番号 企業理念 採用情報 支店 営業所 事業所';
+      var query = companyName + ' 会社概要 企業情報 本社 設立 資本金 従業員数 代表取締役 電話番号 企業理念 -求人 -転職 -採用 -doda -mynavi';
       if (options && options.additionalTerms) {
         query += ' ' + options.additionalTerms;
       }
@@ -144,52 +171,6 @@ var TavilyClient = (function() {
         apiService: 'Tavily'
       });
       
-      throw error;
-    }
-  }
-
-  /**
-   * Search for specific company information
-   */
-  function searchCompanyDetails(companyName, searchType) {
-    var searchQueries = {
-      'financial': companyName + ' 財務情報 売上 利益 決算',
-      'news': companyName + ' 最新ニュース 発表 プレスリリース',
-      'recruitment': companyName + ' 採用情報 新卒採用 中途採用',
-      'branches': companyName + ' 支店 営業所 事業所 支社 拠点 オフィス 工場 -店舗 -ショップ -販売店',
-      'corporate': companyName + ' 企業理念 経営方針 代表者'
-    };
-
-    var query = searchQueries[searchType] || searchQueries['corporate'];
-    
-    try {
-      var apiKey = getApiKey();
-      
-      Logger.logDebug('Searching company details with Tavily: ' + companyName + ' (' + searchType + ')');
-
-      var requestPayload = {
-        api_key: apiKey,
-        query: query,
-        search_depth: 'advanced',
-        include_answer: true,
-        max_results: 5
-      };
-
-      var requestOptions = {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
-        useCache: true,
-        cacheExpiration: Constants.CACHE_CONFIG.DURATION.MEDIUM
-      };
-
-      var response = ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions);
-      var formatted = formatSearchResults(response);
-      return formatted;
-
-    } catch (error) {
-      Logger.logError('Exception in Tavily searchCompanyDetails', error);
       throw error;
     }
   }
@@ -296,7 +277,6 @@ var TavilyClient = (function() {
   // Return public API
   return {
     searchCompany: searchCompany,
-    searchCompanyDetails: searchCompanyDetails,
     searchByPhoneNumber: searchByPhoneNumber,
     getApiStats: getApiStats,
     testConnection: testConnection

@@ -393,7 +393,24 @@ var ProductionTests = (function() {
     console.log('📊 実際のスプレッドシート処理テスト');
     
     try {
+      // スプレッドシートサービスを明示的に初期化
+      console.log('🔧 スプレッドシート初期化中...');
+      SpreadsheetService.initializeSpreadsheet();
+      console.log('✅ スプレッドシート初期化完了');
+      
+      // スプレッドシート情報を確認
+      var spreadsheetInfo = SpreadsheetService.getSpreadsheetInfo();
+      if (spreadsheetInfo && spreadsheetInfo.id !== 'unknown') {
+        console.log('📋 スプレッドシート情報:');
+        console.log('  - ID:', spreadsheetInfo.id);
+        console.log('  - 名前:', spreadsheetInfo.name);
+        console.log('  - URL:', spreadsheetInfo.url);
+      } else {
+        console.log('⚠️ スプレッドシート情報の取得に失敗しましたが、処理を続行します');
+      }
+      
       // 実際のスプレッドシートから企業リスト取得
+      console.log('📊 企業リスト取得中...');
       var companies = SpreadsheetService.getCompanyList('未処理');
       console.log('処理対象企業数:', companies.length);
       
@@ -423,35 +440,78 @@ var ProductionTests = (function() {
         
         for (var i = 0; i < testCompanies.length; i++) {
           var company = testCompanies[i];
-          console.log('スプレッドシート処理中 (' + (i + 1) + '/' + testCount + '):', company.companyName);
+          console.log('スプレッドシート処理中 (' + (i + 1) + '/' + testCount + '):', company.name);
           
           try {
-            var result = CompanyResearchService.researchCompany(company.companyName);
+            var result = CompanyResearchService.researchCompany(company.name);
             
             if (result.success) {
-              // スプレッドシートに結果を保存
-              SpreadsheetService.saveCompanyInfo(result.company);
-              processedResults.push({
-                success: true,
-                rowIndex: company.rowIndex,
-                companyName: company.companyName,
-                company: result.company
-              });
-            } else {
+              // スプレッドシートに結果を保存（新しいトランザクション的な保存処理）
+              var saveSuccess = true;
+              try {
+                // ステータスを処理中に更新
+                SpreadsheetService.updateCompanyStatus(company.rowIndex, '処理中', '');
+                
+                // 本社情報を保存
+                if (!SpreadsheetService.saveHeadquartersInfo(result.company)) {
+                  throw new Error('Failed to save headquarters info');
+                }
+                
+                // 支店情報を保存（存在する場合）
+                if (result.branches && result.branches.length > 0) {
+                  if (!SpreadsheetService.saveBranchesInfo(result.company.id, result.branches)) {
+                    throw new Error('Failed to save branches info');
+                  }
+                }
+                
+                // ニュースサマリーを保存（存在する場合）
+                if (result.newsSummary) {
+                  if (!SpreadsheetService.saveNewsSummary(result.company.id, result.newsSummary)) {
+                    throw new Error('Failed to save news summary');
+                  }
+                }
+                
+                // 採用情報サマリーを保存（存在する場合）
+                if (result.recruitmentSummary) {
+                  if (!SpreadsheetService.saveRecruitmentSummary(result.company.id, result.recruitmentSummary)) {
+                    throw new Error('Failed to save recruitment summary');
+                  }
+                }
+                
+                // すべて成功した場合のみ完了ステータスに更新
+                SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了', '');
+                
+              } catch (saveError) {
+                saveSuccess = false;
+                SpreadsheetService.updateCompanyStatus(company.rowIndex, 'エラー', 'データ保存エラー: ' + saveError.message);
+                console.log('❌ データ保存エラー:', saveError.message);
+              }
+              
+                              processedResults.push({
+                  success: saveSuccess,
+                  rowIndex: company.rowIndex,
+                  companyName: company.name,
+                  company: result.company,
+                  branches: result.branches,
+                  newsSummary: result.newsSummary,
+                  recruitmentSummary: result.recruitmentSummary,
+                  saveError: saveSuccess ? null : saveError.message
+                });
+              } else {
+                processedResults.push({
+                  success: false,
+                  rowIndex: company.rowIndex,
+                  companyName: company.name,
+                  error: result.error
+                });
+              }
+            } catch (error) {
               processedResults.push({
                 success: false,
                 rowIndex: company.rowIndex,
-                companyName: company.companyName,
-                error: result.error
+                companyName: company.name,
+                error: error.toString()
               });
-            }
-          } catch (error) {
-            processedResults.push({
-              success: false,
-              rowIndex: company.rowIndex,
-              companyName: company.companyName,
-              error: error.toString()
-            });
           }
         }
         

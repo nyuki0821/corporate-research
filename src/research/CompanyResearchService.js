@@ -195,7 +195,7 @@ var CompanyResearchService = (function() {
       
       // Search using company name
       var companySearchResult = TavilyClient.searchCompany(companyName, {
-        additionalTerms: '本社 設立 従業員数 資本金 代表取締役 電話番号 郵便番号 企業理念 採用情報 支店 営業所 事業所 支社',
+        additionalTerms: '本社 設立 従業員数 資本金 代表取締役 電話番号 郵便番号 企業理念 支店 営業所 事業所 支社',
         max_results: 10
       });
       searchResults.push(companySearchResult);
@@ -206,33 +206,15 @@ var CompanyResearchService = (function() {
         searchResults.push(phoneSearchResult);
       }
 
-      // Additional search for branch/office information
-      var branchSearchResult = TavilyClient.searchCompanyDetails(companyName, 'branches');
-      if (branchSearchResult.success) {
-        searchResults.push(branchSearchResult);
-      }
-
-      // Additional search for latest news
-      var newsSearchResult = TavilyClient.searchCompanyDetails(companyName, 'news');
-      if (newsSearchResult.success) {
-        searchResults.push(newsSearchResult);
-      }
-
-      // Additional search for recruitment information
-      var recruitmentSearchResult = TavilyClient.searchCompanyDetails(companyName, 'recruitment');
-      if (recruitmentSearchResult.success) {
-        searchResults.push(recruitmentSearchResult);
-      }
-
       // Combine search results
       var combinedResults = {
         success: true,
         results: []
       };
 
-      searchResults.forEach(function(result) {
-        if (result.success && result.results) {
-          combinedResults.results = combinedResults.results.concat(result.results);
+      searchResults.forEach(function(searchResult) {
+        if (searchResult.success && searchResult.results) {
+          combinedResults.results = combinedResults.results.concat(searchResult.results);
         }
       });
 
@@ -256,7 +238,7 @@ var CompanyResearchService = (function() {
         confidence: validation.confidence
       });
 
-      // Extract company information using AI
+      // Extract company information using AI (single extraction for both headquarters and branches)
       var extractionResult = OpenAIClient.extractCompanyInfo(companyName, combinedResults, phoneNumber);
       
       if (!extractionResult.success) {
@@ -278,6 +260,18 @@ var CompanyResearchService = (function() {
         extractionResult.success
       );
 
+      // OpenAIが返した信頼性スコアが数値でない場合は計算値で上書き
+      var openaiReliabilityScore = extractionResult.data.reliabilityScore;
+      if (typeof openaiReliabilityScore !== 'number' || 
+          isNaN(openaiReliabilityScore) || 
+          openaiReliabilityScore < 0 || 
+          openaiReliabilityScore > 100) {
+        Logger.logWarning('OpenAI信頼性スコアが無効、計算値で上書き: ' + openaiReliabilityScore + ' → ' + reliabilityScore);
+      } else {
+        // OpenAIの値が有効な場合はそれを使用
+        reliabilityScore = openaiReliabilityScore;
+      }
+
       // Add metadata to extracted data
       var enhancedData = Object.assign({}, extractionResult.data, {
         id: companyId,
@@ -287,10 +281,17 @@ var CompanyResearchService = (function() {
         sourceUrls: combinedResults.results.map(function(r) { return r.url; }).slice(0, 5)
       });
 
-      // Extract branch information if available
+      // Extract branch information from the main extraction result
       var branches = [];
       if (extractionResult.data.branches && Array.isArray(extractionResult.data.branches)) {
-        branches = extractionResult.data.branches.map(function(branch) {
+        Logger.logInfo('支店情報抽出: ' + companyName + ' (' + extractionResult.data.branches.length + '件)');
+        
+        branches = extractionResult.data.branches.map(function(branch, index) {
+          Logger.logDebug('支店' + (index + 1) + ': ' + 
+            (branch.name || '名称不明') + ' (' + (branch.type || 'タイプ不明') + ') - ' +
+            (branch.prefecture || '') + (branch.city || '') + ' ' +
+            (branch.phone || '電話番号なし'));
+            
           return {
             companyId: companyId,
             name: branch.name || '',
@@ -305,64 +306,15 @@ var CompanyResearchService = (function() {
             notes: branch.notes || ''
           };
         });
+        
+        Logger.logInfo('支店情報処理完了: ' + companyName + ' (' + branches.length + '件)');
+      } else {
+        Logger.logInfo('支店情報なし: ' + companyName);
       }
 
-      // Generate news summary if news search was successful
-      var newsSummary = null;
-      if (newsSearchResult && newsSearchResult.success) {
-        var newsResult = OpenAIClient.generateNewsSummary(companyName, newsSearchResult);
-        if (newsResult.success) {
-          newsSummary = {
-            summary: newsResult.data.summary,
-            keyPoints: newsResult.data.keyPoints,
-            businessImpact: newsResult.data.businessImpact,
-            sourceCount: newsResult.data.sourceCount,
-            lastUpdated: newsResult.data.lastUpdated,
-            sourceUrls: newsResult.data.sourceUrls
-          };
-          
-          // Update company data with news information
-          enhancedData.latestNews = newsSummary.summary;
-          if (newsSummary.sourceUrls.length > 0) {
-            enhancedData.sourceUrls = enhancedData.sourceUrls.concat(newsSummary.sourceUrls.slice(0, 3));
-          }
-        }
-      }
-
-      // Generate recruitment summary if recruitment search was successful
-      var recruitmentSummary = null;
-      if (recruitmentSearchResult && recruitmentSearchResult.success) {
-        var recruitmentResult = OpenAIClient.generateRecruitmentSummary(companyName, recruitmentSearchResult);
-        if (recruitmentResult.success) {
-          recruitmentSummary = {
-            summary: recruitmentResult.data.summary,
-            recruitmentTypes: recruitmentResult.data.recruitmentTypes,
-            targetPositions: recruitmentResult.data.targetPositions,
-            companyGrowth: recruitmentResult.data.companyGrowth,
-            businessOpportunity: recruitmentResult.data.businessOpportunity,
-            keyInsights: recruitmentResult.data.keyInsights,
-            sourceCount: recruitmentResult.data.sourceCount,
-            lastUpdated: recruitmentResult.data.lastUpdated,
-            recruitmentUrl: recruitmentResult.data.recruitmentUrl,
-            sourceUrls: recruitmentResult.data.sourceUrls
-          };
-          
-          // Update company data with recruitment information
-          enhancedData.recruitmentStatus = recruitmentSummary.summary;
-          if (recruitmentSummary.sourceUrls.length > 0) {
-            enhancedData.sourceUrls = enhancedData.sourceUrls.concat(recruitmentSummary.sourceUrls.slice(0, 2));
-          }
-        }
-      }
-
-      // Create company object with news summary
-      var companyData = Object.assign({}, enhancedData, {
-        newsSummary: newsSummary,
-        recruitmentSummary: recruitmentSummary
-      });
-      
+      // Create company object
       var company = createCompanyObject(
-        companyData,
+        enhancedData,
         companyId,
         enhancedData.sourceUrls
       );
@@ -373,15 +325,14 @@ var CompanyResearchService = (function() {
       Logger.logInfo('Research completed successfully for: ' + companyName, {
         duration: duration + 'ms',
         reliabilityScore: reliabilityScore,
-        fieldsExtracted: Object.keys(extractionResult.data).length
+        fieldsExtracted: Object.keys(extractionResult.data).length,
+        branchCount: branches.length
       });
 
       return {
         success: true,
         company: company,
         branches: branches,
-        newsSummary: newsSummary,
-        recruitmentSummary: recruitmentSummary,
         searchValidation: validation,
         extractionResult: extractionResult,
         processingTime: duration,
@@ -389,9 +340,7 @@ var CompanyResearchService = (function() {
           searchResultCount: combinedResults.results.length,
           confidence: validation.confidence,
           reliabilityScore: reliabilityScore,
-          branchCount: branches.length,
-          newsSourceCount: newsSummary ? newsSummary.sourceCount : 0,
-          recruitmentSourceCount: recruitmentSummary ? recruitmentSummary.sourceCount : 0
+          branchCount: branches.length
         }
       };
 

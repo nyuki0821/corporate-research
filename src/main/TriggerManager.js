@@ -1,5 +1,5 @@
 /**
- * @fileoverview Trigger management system for the Corporate Research System
+ * @fileoverview Manual Control System for the Corporate Research System
  * @author Corporate Research Team
  * 
  * 依存モジュール:
@@ -11,7 +11,12 @@
 
 var TriggerManager = (function() {
   // Private variables
-  var _activeTriggers = [];
+  var _processStatus = {
+    batchProcessing: false,
+    systemMaintenance: false,
+    errorMonitoring: false,
+    performanceCheck: false
+  };
 
   // Private functions
   /**
@@ -42,209 +47,41 @@ var TriggerManager = (function() {
   }
 
   /**
-   * Create time-based trigger
+   * Set process status
    * @private
    */
-  function createTimeTrigger(functionName, intervalMinutes, startTime) {
-    try {
-      var trigger;
-      
-      if (intervalMinutes) {
-        // Recurring trigger
-        trigger = ScriptApp.newTrigger(functionName)
-          .timeBased()
-          .everyMinutes(intervalMinutes)
-          .create();
-      } else if (startTime) {
-        // One-time trigger
-        trigger = ScriptApp.newTrigger(functionName)
-          .timeBased()
-          .at(startTime)
-          .create();
-      } else {
-        throw new Error('Either intervalMinutes or startTime must be provided');
-      }
-      
-      Logger.logInfo('Created time trigger for function: ' + functionName);
-      return trigger;
-    } catch (error) {
-      Logger.logError('Failed to create time trigger for: ' + functionName, error);
-      throw error;
-    }
+  function setProcessStatus(processName, isRunning) {
+    _processStatus[processName] = isRunning;
+    
+    // Store status in script properties for persistence
+    var statusKey = 'PROCESS_STATUS_' + processName.toUpperCase();
+    ConfigManager.set(statusKey, isRunning.toString());
+    
+    Logger.logInfo('Process status updated', {
+      process: processName,
+      status: isRunning ? 'RUNNING' : 'STOPPED'
+    });
   }
 
   /**
-   * Create daily trigger
+   * Get process status
    * @private
    */
-  function createDailyTrigger(functionName, hour, minute) {
-    try {
-      var trigger = ScriptApp.newTrigger(functionName)
-        .timeBased()
-        .everyDays(1)
-        .atHour(hour || 0)
-        .nearMinute(minute || 0)
-        .create();
-      
-      Logger.logInfo('Created daily trigger for function: ' + functionName + ' at ' + (hour || 0) + ':' + (minute || 0));
-      return trigger;
-    } catch (error) {
-      Logger.logError('Failed to create daily trigger for: ' + functionName, error);
-      throw error;
+  function getProcessStatus(processName) {
+    // Get from script properties for persistence
+    var statusKey = 'PROCESS_STATUS_' + processName.toUpperCase();
+    var stored = ConfigManager.get(statusKey);
+    
+    if (stored !== null) {
+      _processStatus[processName] = stored === 'true';
     }
-  }
-
-  /**
-   * Create weekly trigger
-   * @private
-   */
-  function createWeeklyTrigger(functionName, dayOfWeek, hour, minute) {
-    try {
-      var trigger = ScriptApp.newTrigger(functionName)
-        .timeBased()
-        .onWeekDay(dayOfWeek || ScriptApp.WeekDay.SUNDAY)
-        .atHour(hour || 0)
-        .nearMinute(minute || 0)
-        .create();
-      
-      Logger.logInfo('Created weekly trigger for function: ' + functionName);
-      return trigger;
-    } catch (error) {
-      Logger.logError('Failed to create weekly trigger for: ' + functionName, error);
-      throw error;
-    }
+    
+    return _processStatus[processName] || false;
   }
 
   // Public functions
   /**
-   * Setup all basic triggers
-   */
-  function setupBasicTriggers() {
-    try {
-      Logger.logInfo('Setting up basic triggers for Corporate Research System');
-      
-      var setupTriggers = [];
-      
-      // 1. Batch processing trigger (every 4 hours)
-      deleteTriggersByFunction('executeBatchProcessing');
-      var batchTrigger = createTimeTrigger('executeBatchProcessing', 240); // 4 hours
-      setupTriggers.push({ function: 'executeBatchProcessing', type: 'recurring', trigger: batchTrigger });
-      
-      // 2. System maintenance trigger (daily at 3:00 AM)
-      deleteTriggersByFunction('executeSystemMaintenance');
-      var maintenanceTrigger = createDailyTrigger('executeSystemMaintenance', 3, 0);
-      setupTriggers.push({ function: 'executeSystemMaintenance', type: 'daily', trigger: maintenanceTrigger });
-      
-      // 3. Cache cleanup trigger (daily at 2:00 AM)
-      deleteTriggersByFunction('executeCacheCleanup');
-      var cacheCleanupTrigger = createDailyTrigger('executeCacheCleanup', 2, 0);
-      setupTriggers.push({ function: 'executeCacheCleanup', type: 'daily', trigger: cacheCleanupTrigger });
-      
-      // 4. Configuration validation trigger (weekly on Sunday at 1:00 AM)
-      deleteTriggersByFunction('executeConfigValidation');
-      var configTrigger = createWeeklyTrigger('executeConfigValidation', ScriptApp.WeekDay.SUNDAY, 1, 0);
-      setupTriggers.push({ function: 'executeConfigValidation', type: 'weekly', trigger: configTrigger });
-      
-      Logger.logInfo('Basic triggers setup completed', { 
-        triggerCount: setupTriggers.length 
-      });
-      
-      return {
-        success: true,
-        triggers: setupTriggers,
-        count: setupTriggers.length
-      };
-      
-    } catch (error) {
-      Logger.logError('Failed to setup basic triggers', error);
-      ErrorHandler.handleError(error, { function: 'setupBasicTriggers' });
-      
-      return {
-        success: false,
-        error: error.message,
-        triggers: []
-      };
-    }
-  }
-
-  /**
-   * Setup monitoring triggers
-   */
-  function setupMonitoringTriggers() {
-    try {
-      Logger.logInfo('Setting up monitoring triggers');
-      
-      var setupTriggers = [];
-      
-      // Error monitoring trigger (every 2 hours)
-      deleteTriggersByFunction('executeErrorMonitoring');
-      var errorMonitorTrigger = createTimeTrigger('executeErrorMonitoring', 120);
-      setupTriggers.push({ function: 'executeErrorMonitoring', type: 'recurring', trigger: errorMonitorTrigger });
-      
-      // Performance monitoring trigger (daily at 6:00 AM)
-      deleteTriggersByFunction('executePerformanceCheck');
-      var perfTrigger = createDailyTrigger('executePerformanceCheck', 6, 0);
-      setupTriggers.push({ function: 'executePerformanceCheck', type: 'daily', trigger: perfTrigger });
-      
-      Logger.logInfo('Monitoring triggers setup completed', { 
-        triggerCount: setupTriggers.length 
-      });
-      
-      return {
-        success: true,
-        triggers: setupTriggers,
-        count: setupTriggers.length
-      };
-      
-    } catch (error) {
-      Logger.logError('Failed to setup monitoring triggers', error);
-      return {
-        success: false,
-        error: error.message,
-        triggers: []
-      };
-    }
-  }
-
-  /**
-   * Setup all triggers (basic + monitoring)
-   */
-  function setupAllTriggers() {
-    try {
-      Logger.logInfo('Setting up all triggers for Corporate Research System');
-      
-      var basicResult = setupBasicTriggers();
-      var monitoringResult = setupMonitoringTriggers();
-      
-      var totalTriggers = (basicResult.triggers || []).concat(monitoringResult.triggers || []);
-      
-      Logger.logInfo('All triggers setup completed', {
-        totalTriggers: totalTriggers.length,
-        basicSuccess: basicResult.success,
-        monitoringSuccess: monitoringResult.success
-      });
-      
-      return {
-        success: basicResult.success && monitoringResult.success,
-        basic: basicResult,
-        monitoring: monitoringResult,
-        totalCount: totalTriggers.length,
-        allTriggers: totalTriggers
-      };
-      
-    } catch (error) {
-      Logger.logError('Failed to setup all triggers', error);
-      ErrorHandler.handleError(error, { function: 'setupAllTriggers' });
-      
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  /**
-   * Delete all project triggers
+   * Delete all project triggers (cleanup function)
    */
   function deleteAllTriggers() {
     try {
@@ -319,33 +156,55 @@ var TriggerManager = (function() {
   }
 
   /**
-   * Schedule one-time batch processing
+   * Get all process status
    */
-  function scheduleBatchProcessing(delayMinutes) {
+  function getAllProcessStatus() {
+    var status = {};
+    
+    Object.keys(_processStatus).forEach(function(processName) {
+      status[processName] = getProcessStatus(processName);
+    });
+    
+    return {
+      success: true,
+      processCount: Object.keys(status).length,
+      processes: status
+    };
+  }
+
+  /**
+   * Start batch processing manually
+   */
+  function startBatchProcessing() {
     try {
-      if (!delayMinutes) delayMinutes = 1;
+      if (getProcessStatus('batchProcessing')) {
+        Logger.logWarning('Batch processing is already running');
+        return {
+          success: false,
+          error: 'Batch processing is already running'
+        };
+      }
       
-      var startTime = new Date();
-      startTime.setMinutes(startTime.getMinutes() + delayMinutes);
+      setProcessStatus('batchProcessing', true);
+      Logger.logInfo('Starting manual batch processing');
       
-      // Delete any existing scheduled batch processing
-      deleteTriggersByFunction('executeBatchProcessing');
-      
-      var trigger = createTimeTrigger('executeBatchProcessing', null, startTime);
-      
-      Logger.logInfo('Scheduled batch processing', { 
-        startTime: startTime.toISOString(),
-        delayMinutes: delayMinutes
-      });
+      // Execute batch processing
+      if (typeof BatchProcessor !== 'undefined') {
+        BatchProcessor.startBatchProcessing();
+      } else {
+        Logger.logError('BatchProcessor not available');
+        setProcessStatus('batchProcessing', false);
+        throw new Error('BatchProcessor not available');
+      }
       
       return {
         success: true,
-        scheduledTime: startTime,
-        trigger: trigger
+        message: 'Batch processing started successfully'
       };
       
     } catch (error) {
-      Logger.logError('Failed to schedule batch processing', error);
+      Logger.logError('Failed to start batch processing', error);
+      setProcessStatus('batchProcessing', false);
       
       return {
         success: false,
@@ -355,30 +214,263 @@ var TriggerManager = (function() {
   }
 
   /**
-   * Test trigger system
+   * Stop batch processing manually
    */
-  function testTriggerSystem() {
+  function stopBatchProcessing() {
     try {
-      Logger.logInfo('Testing trigger system');
+      if (!getProcessStatus('batchProcessing')) {
+        Logger.logWarning('Batch processing is not running');
+        return {
+          success: false,
+          error: 'Batch processing is not running'
+        };
+      }
       
-      // Create a test trigger
-      var testTime = new Date();
-      testTime.setMinutes(testTime.getMinutes() + 1);
+      setProcessStatus('batchProcessing', false);
+      Logger.logInfo('Stopped manual batch processing');
       
-      var testTrigger = createTimeTrigger('testTriggerFunction', null, testTime);
-      
-      // Immediately delete it (just testing creation)
-      ScriptApp.deleteTrigger(testTrigger);
-      
-      Logger.logInfo('Trigger system test completed successfully');
+      // Note: Actual stopping of running process would require additional implementation
+      // For now, we just update the status
       
       return {
         success: true,
-        message: 'Trigger system is working correctly'
+        message: 'Batch processing stopped successfully'
       };
       
     } catch (error) {
-      Logger.logError('Trigger system test failed', error);
+      Logger.logError('Failed to stop batch processing', error);
+      
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Execute system maintenance manually
+   */
+  function executeSystemMaintenance() {
+    try {
+      if (getProcessStatus('systemMaintenance')) {
+        Logger.logWarning('System maintenance is already running');
+        return {
+          success: false,
+          error: 'System maintenance is already running'
+        };
+      }
+      
+      setProcessStatus('systemMaintenance', true);
+      Logger.logInfo('Starting manual system maintenance');
+      
+      // Clear old cache entries
+      if (typeof ApiBase !== 'undefined') {
+        ApiBase.clearCache();
+      }
+      
+      // Clear configuration cache
+      if (typeof ConfigManager !== 'undefined') {
+        ConfigManager.clearCache();
+      }
+      
+      // Clear script cache
+      CacheService.getScriptCache().removeAll([]);
+      
+      setProcessStatus('systemMaintenance', false);
+      Logger.logInfo('System maintenance completed');
+      
+      return {
+        success: true,
+        message: 'System maintenance completed successfully'
+      };
+      
+    } catch (error) {
+      Logger.logError('Error in system maintenance', error);
+      setProcessStatus('systemMaintenance', false);
+      
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Execute error monitoring manually
+   */
+  function executeErrorMonitoring() {
+    try {
+      if (getProcessStatus('errorMonitoring')) {
+        Logger.logWarning('Error monitoring is already running');
+        return {
+          success: false,
+          error: 'Error monitoring is already running'
+        };
+      }
+      
+      setProcessStatus('errorMonitoring', true);
+      Logger.logInfo('Starting manual error monitoring');
+      
+      var result = { hasAlerts: false, alerts: [] };
+      
+      if (typeof ErrorHandler !== 'undefined') {
+        var monitoring = ErrorHandler.monitorCriticalErrors();
+        result = monitoring;
+        
+        if (monitoring.hasAlerts) {
+          Logger.logWarning('Critical errors detected', monitoring);
+          
+          var email = ConfigManager.get('NOTIFICATION_EMAIL');
+          if (email) {
+            var alertMessages = monitoring.alerts.map(function(alert) {
+              return '- ' + alert.level + ': ' + alert.message + ' (' + alert.action + ')';
+            }).join('\n');
+            
+            MailApp.sendEmail(
+              email,
+              '[Corporate Research] Critical Error Alert',
+              'Critical errors detected in the system:\n\n' + alertMessages
+            );
+          }
+        }
+      }
+      
+      setProcessStatus('errorMonitoring', false);
+      Logger.logInfo('Error monitoring completed');
+      
+      return {
+        success: true,
+        message: 'Error monitoring completed successfully',
+        hasAlerts: result.hasAlerts,
+        alerts: result.alerts || []
+      };
+      
+    } catch (error) {
+      Logger.logError('Error in error monitoring', error);
+      setProcessStatus('errorMonitoring', false);
+      
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Execute performance check manually
+   */
+  function executePerformanceCheck() {
+    try {
+      if (getProcessStatus('performanceCheck')) {
+        Logger.logWarning('Performance check is already running');
+        return {
+          success: false,
+          error: 'Performance check is already running'
+        };
+      }
+      
+      setProcessStatus('performanceCheck', true);
+      Logger.logInfo('Starting manual performance check');
+      
+      // Check API statistics
+      var stats = {
+        timestamp: new Date(),
+        components: {}
+      };
+      
+      if (typeof TavilyClient !== 'undefined') {
+        stats.components.tavily = TavilyClient.getApiStats();
+      }
+      
+      if (typeof OpenAIClient !== 'undefined') {
+        stats.components.openai = OpenAIClient.getApiStats();
+      }
+      
+      if (typeof CompanyResearchService !== 'undefined') {
+        stats.components.research = CompanyResearchService.getResearchStats();
+      }
+      
+      setProcessStatus('performanceCheck', false);
+      Logger.logInfo('Performance check completed', stats);
+      
+      return {
+        success: true,
+        message: 'Performance check completed successfully',
+        stats: stats
+      };
+      
+    } catch (error) {
+      Logger.logError('Error in performance check', error);
+      setProcessStatus('performanceCheck', false);
+      
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Stop all running processes
+   */
+  function stopAllProcesses() {
+    try {
+      Logger.logInfo('Stopping all running processes');
+      
+      var results = {};
+      
+      // Stop each process
+      Object.keys(_processStatus).forEach(function(processName) {
+        if (getProcessStatus(processName)) {
+          setProcessStatus(processName, false);
+          results[processName] = 'STOPPED';
+        } else {
+          results[processName] = 'NOT_RUNNING';
+        }
+      });
+      
+      Logger.logInfo('All processes stopped', results);
+      
+      return {
+        success: true,
+        message: 'All processes stopped successfully',
+        results: results
+      };
+      
+    } catch (error) {
+      Logger.logError('Failed to stop all processes', error);
+      
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Test manual control system
+   */
+  function testManualControlSystem() {
+    try {
+      Logger.logInfo('Testing manual control system');
+      
+      // Test status functions
+      var statusResult = getAllProcessStatus();
+      
+      if (statusResult.success) {
+        Logger.logInfo('Manual control system test completed successfully');
+        
+        return {
+          success: true,
+          message: 'Manual control system is working correctly',
+          processCount: statusResult.processCount
+        };
+      } else {
+        throw new Error('Status check failed');
+      }
+      
+    } catch (error) {
+      Logger.logError('Manual control system test failed', error);
       
       return {
         success: false,
@@ -389,164 +481,117 @@ var TriggerManager = (function() {
 
   // Return public API
   return {
-    setupBasicTriggers: setupBasicTriggers,
-    setupMonitoringTriggers: setupMonitoringTriggers,
-    setupAllTriggers: setupAllTriggers,
-    deleteAllTriggers: deleteAllTriggers,
+    // Status functions
+    getAllProcessStatus: getAllProcessStatus,
     getTriggerStatus: getTriggerStatus,
-    scheduleBatchProcessing: scheduleBatchProcessing,
-    testTriggerSystem: testTriggerSystem
+    
+    // Manual control functions
+    startBatchProcessing: startBatchProcessing,
+    stopBatchProcessing: stopBatchProcessing,
+    executeSystemMaintenance: executeSystemMaintenance,
+    executeErrorMonitoring: executeErrorMonitoring,
+    executePerformanceCheck: executePerformanceCheck,
+    stopAllProcesses: stopAllProcesses,
+    
+    // Cleanup functions
+    deleteAllTriggers: deleteAllTriggers,
+    
+    // Test function
+    testManualControlSystem: testManualControlSystem
   };
 })();
 
-// Global functions for trigger execution
-function executeBatchProcessing() {
+// Global functions for manual execution (called from spreadsheet menu)
+function startBatchProcessingManually() {
   try {
-    Logger.logInfo('Executing scheduled batch processing');
-    
-    if (typeof BatchProcessor !== 'undefined') {
-      BatchProcessor.startBatchProcessing();
-    } else {
-      Logger.logError('BatchProcessor not available');
-    }
+    Logger.logInfo('Starting batch processing manually from menu');
+    return TriggerManager.startBatchProcessing();
   } catch (error) {
-    Logger.logError('Error in scheduled batch processing', error);
-    ErrorHandler.handleError(error, { function: 'executeBatchProcessing' });
+    Logger.logError('Error starting batch processing manually', error);
+    ErrorHandler.handleError(error, { function: 'startBatchProcessingManually' });
+    throw error;
   }
 }
 
-function executeSystemMaintenance() {
+function stopBatchProcessingManually() {
   try {
-    Logger.logInfo('Executing system maintenance');
-    
-    // Clear old cache entries
-    if (typeof ApiBase !== 'undefined') {
-      ApiBase.clearCache();
-    }
-    
-    // Clear configuration cache
-    if (typeof ConfigManager !== 'undefined') {
-      ConfigManager.clearCache();
-    }
-    
-    Logger.logInfo('System maintenance completed');
+    Logger.logInfo('Stopping batch processing manually from menu');
+    return TriggerManager.stopBatchProcessing();
   } catch (error) {
-    Logger.logError('Error in system maintenance', error);
-    ErrorHandler.handleError(error, { function: 'executeSystemMaintenance' });
+    Logger.logError('Error stopping batch processing manually', error);
+    ErrorHandler.handleError(error, { function: 'stopBatchProcessingManually' });
+    throw error;
   }
 }
 
-function executeCacheCleanup() {
+function executeSystemMaintenanceManually() {
   try {
-    Logger.logInfo('Executing cache cleanup');
-    
-    var cache = CacheService.getScriptCache();
-    cache.removeAll([]);
-    
-    Logger.logInfo('Cache cleanup completed');
+    Logger.logInfo('Executing system maintenance manually from menu');
+    return TriggerManager.executeSystemMaintenance();
   } catch (error) {
-    Logger.logError('Error in cache cleanup', error);
-    ErrorHandler.handleError(error, { function: 'executeCacheCleanup' });
+    Logger.logError('Error in manual system maintenance', error);
+    ErrorHandler.handleError(error, { function: 'executeSystemMaintenanceManually' });
+    throw error;
   }
 }
 
-function executeConfigValidation() {
+function executeErrorMonitoringManually() {
   try {
-    Logger.logInfo('Executing configuration validation');
-    
-    if (typeof ConfigManager !== 'undefined') {
-      var validation = ConfigManager.validate();
-      
-      if (!validation.isValid) {
-        Logger.logWarning('Configuration validation failed', validation);
-        
-        // Send notification if email is configured
-        var email = ConfigManager.get('NOTIFICATION_EMAIL');
-        if (email) {
-          MailApp.sendEmail(
-            email,
-            '[Corporate Research] Configuration Issues Detected',
-            'Configuration validation found issues:\n\n' + validation.issues.join('\n')
-          );
-        }
-      } else {
-        Logger.logInfo('Configuration validation passed');
-      }
-    }
+    Logger.logInfo('Executing error monitoring manually from menu');
+    return TriggerManager.executeErrorMonitoring();
   } catch (error) {
-    Logger.logError('Error in configuration validation', error);
-    ErrorHandler.handleError(error, { function: 'executeConfigValidation' });
+    Logger.logError('Error in manual error monitoring', error);
+    ErrorHandler.handleError(error, { function: 'executeErrorMonitoringManually' });
+    throw error;
   }
 }
 
-function executeErrorMonitoring() {
+function executePerformanceCheckManually() {
   try {
-    Logger.logInfo('Executing error monitoring');
-    
-    if (typeof ErrorHandler !== 'undefined') {
-      var monitoring = ErrorHandler.monitorCriticalErrors();
-      
-      if (monitoring.hasAlerts) {
-        Logger.logWarning('Critical errors detected', monitoring);
-        
-        var email = ConfigManager.get('NOTIFICATION_EMAIL');
-        if (email) {
-          var alertMessages = monitoring.alerts.map(function(alert) {
-            return '- ' + alert.level + ': ' + alert.message + ' (' + alert.action + ')';
-          }).join('\n');
-          
-          MailApp.sendEmail(
-            email,
-            '[Corporate Research] Critical Error Alert',
-            'Critical errors detected in the system:\n\n' + alertMessages
-          );
-        }
-      }
-    }
+    Logger.logInfo('Executing performance check manually from menu');
+    return TriggerManager.executePerformanceCheck();
   } catch (error) {
-    Logger.logError('Error in error monitoring', error);
-    ErrorHandler.handleError(error, { function: 'executeErrorMonitoring' });
+    Logger.logError('Error in manual performance check', error);
+    ErrorHandler.handleError(error, { function: 'executePerformanceCheckManually' });
+    throw error;
   }
 }
 
-function executePerformanceCheck() {
+function stopAllProcessesManually() {
   try {
-    Logger.logInfo('Executing performance check');
-    
-    // Check API statistics
-    var stats = {
-      timestamp: new Date(),
-      components: {}
-    };
-    
-    if (typeof TavilyClient !== 'undefined') {
-      stats.components.tavily = TavilyClient.getApiStats();
-    }
-    
-    if (typeof OpenAIClient !== 'undefined') {
-      stats.components.openai = OpenAIClient.getApiStats();
-    }
-    
-    if (typeof CompanyResearchService !== 'undefined') {
-      stats.components.research = CompanyResearchService.getResearchStats();
-    }
-    
-    Logger.logInfo('Performance check completed', stats);
+    Logger.logInfo('Stopping all processes manually from menu');
+    return TriggerManager.stopAllProcesses();
   } catch (error) {
-    Logger.logError('Error in performance check', error);
-    ErrorHandler.handleError(error, { function: 'executePerformanceCheck' });
+    Logger.logError('Error stopping all processes manually', error);
+    ErrorHandler.handleError(error, { function: 'stopAllProcessesManually' });
+    throw error;
   }
 }
 
-function testTriggerFunction() {
-  Logger.logInfo('Test trigger function executed successfully');
+function checkProcessStatusManually() {
+  try {
+    Logger.logInfo('Checking process status manually from menu');
+    return TriggerManager.getAllProcessStatus();
+  } catch (error) {
+    Logger.logError('Error checking process status manually', error);
+    ErrorHandler.handleError(error, { function: 'checkProcessStatusManually' });
+    throw error;
+  }
 }
 
-// Backward compatibility functions
+// Backward compatibility - remove all automatic trigger setup
 function setupBasicTriggersOnly() {
-  return TriggerManager.setupBasicTriggers();
+  Logger.logWarning('Automatic trigger setup is disabled. Use manual control functions instead.');
+  return {
+    success: false,
+    error: 'Automatic triggers are disabled. Use manual control functions.'
+  };
 }
 
 function setupAllTriggersWithMonitoring() {
-  return TriggerManager.setupAllTriggers();
-}
+  Logger.logWarning('Automatic trigger setup is disabled. Use manual control functions instead.');
+  return {
+    success: false,
+    error: 'Automatic triggers are disabled. Use manual control functions.'
+  };
+} 

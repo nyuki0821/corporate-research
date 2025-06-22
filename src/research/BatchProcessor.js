@@ -153,26 +153,26 @@ var BatchProcessor = (function() {
                   if (!SpreadsheetService.saveHeadquartersInfo(result.company)) {
                     throw new Error('Failed to save headquarters info');
                   }
+                  Logger.logInfo('本社情報保存完了: ' + company.name);
                   
                   // 支店情報を保存（存在する場合）
                   if (result.branches && result.branches.length > 0) {
+                    Logger.logInfo('支店情報を保存中: ' + company.name + ' (' + result.branches.length + '件)');
+                    
+                    // 支店情報の詳細をログ出力
+                    result.branches.forEach(function(branch, index) {
+                      Logger.logDebug('支店' + (index + 1) + ': ' + 
+                        (branch.name || '名称不明') + ' (' + (branch.type || 'タイプ不明') + ') - ' +
+                        (branch.prefecture || '') + (branch.city || '') + ' ' +
+                        (branch.phone || '電話番号なし'));
+                    });
+                    
                     if (!SpreadsheetService.saveBranchesInfo(result.company.id, result.branches)) {
                       throw new Error('Failed to save branches info');
                     }
-                  }
-                  
-                  // ニュースサマリーを保存（存在する場合）
-                  if (result.newsSummary) {
-                    if (!SpreadsheetService.saveNewsSummary(result.company.id, result.newsSummary)) {
-                      throw new Error('Failed to save news summary');
-                    }
-                  }
-                  
-                  // 採用情報サマリーを保存（存在する場合）
-                  if (result.recruitmentSummary) {
-                    if (!SpreadsheetService.saveRecruitmentSummary(result.company.id, result.recruitmentSummary)) {
-                      throw new Error('Failed to save recruitment summary');
-                    }
+                    Logger.logInfo('支店情報保存完了: ' + company.name + ' (' + result.branches.length + '件)');
+                  } else {
+                    Logger.logInfo('支店情報なし: ' + company.name + ' (抽出されませんでした)');
                   }
                   
                 } catch (saveErr) {

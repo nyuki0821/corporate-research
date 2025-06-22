@@ -169,7 +169,7 @@ var Company = (function() {
       this.latestNews,                  // 最新ニュース
       this.recruitmentStatus,           // 採用状況
       this.website,                     // 企業URL
-      this.reliabilityScore,            // 信頼性スコア
+      parseFloat(this.reliabilityScore) || 0,  // 信頼性スコア（数値として明示）
       this.processedAt,                 // 処理日時
       this.processingResult,            // 処理結果
       this.errorMessage,                // エラー内容
