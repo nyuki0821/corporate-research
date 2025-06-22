@@ -375,6 +375,17 @@ var BatchProcessor = (function() {
       if (companies.length === 0) {
         Logger.logInfo('処理対象の企業がありません');
         _isProcessing = false;
+        
+        // TriggerManagerの状態も自動リセット
+        if (typeof TriggerManager !== 'undefined') {
+          try {
+            TriggerManager.resetBatchProcessingStatus();
+            Logger.logInfo('バッチ処理状態を自動リセットしました（対象企業なし）');
+          } catch (resetError) {
+            Logger.logWarning('バッチ処理状態のリセットに失敗しました', resetError);
+          }
+        }
+        
         return;
       }
       
@@ -395,10 +406,31 @@ var BatchProcessor = (function() {
         })
         .finally(function() {
           _isProcessing = false;
+          
+          // TriggerManagerの状態も自動リセット
+          if (typeof TriggerManager !== 'undefined') {
+            try {
+              TriggerManager.resetBatchProcessingStatus();
+              Logger.logInfo('バッチ処理状態を自動リセットしました（処理完了）');
+            } catch (resetError) {
+              Logger.logWarning('バッチ処理状態のリセットに失敗しました', resetError);
+            }
+          }
         });
         
     } catch (error) {
       _isProcessing = false;
+      
+      // エラー時もTriggerManagerの状態をリセット
+      if (typeof TriggerManager !== 'undefined') {
+        try {
+          TriggerManager.resetBatchProcessingStatus();
+          Logger.logInfo('バッチ処理状態を自動リセットしました（エラー発生）');
+        } catch (resetError) {
+          Logger.logWarning('バッチ処理状態のリセットに失敗しました', resetError);
+        }
+      }
+      
       Logger.logError('バッチ処理の開始でエラーが発生しました', error);
       throw error;
     }
