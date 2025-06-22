@@ -125,43 +125,127 @@ var TavilyClient = (function() {
       var apiKey = getApiKey();
       var searchOptions = buildSearchOptions(options);
       
-      // Build search query for company
-      var query = companyName + ' 会社概要 企業情報 本社 設立 資本金 従業員数 代表取締役 電話番号 企業理念 -求人 -転職 -採用 -doda -mynavi';
-      if (options && options.additionalTerms) {
-        query += ' ' + options.additionalTerms;
+      // 電話番号がある場合は、それを活用した精密検索
+      var phoneNumber = options && options.phoneNumber ? options.phoneNumber : '';
+      
+      // 検索クエリの構築（優先順位順）
+      var queries = [];
+      
+      // 1. 企業名と電話番号の組み合わせ（最も精密）
+      if (phoneNumber) {
+        queries.push(companyName + ' ' + phoneNumber + ' 会社概要 企業情報');
+      }
+      
+      // 2. 企業名と基本情報キーワード
+      queries.push(companyName + ' 会社概要 企業情報 本社 設立 資本金 従業員数 代表取締役');
+      
+      // 3. 企業名と公式サイト検索
+      queries.push(companyName + ' 公式サイト ホームページ official site');
+      
+      // 4. 企業名と所在地情報
+      queries.push(companyName + ' 本社所在地 住所 アクセス 連絡先');
+      
+      // 除外キーワードを追加（求人・転職サイトを除外）
+      var excludeTerms = ' -求人 -転職 -採用 -doda -mynavi -リクナビ -indeed -転職会議';
+      queries = queries.map(function(q) { return q + excludeTerms; });
+
+      Logger.logDebug('Executing targeted search for: ' + companyName, {
+        phoneNumber: phoneNumber,
+        queryCount: queries.length
+      });
+
+      var allResults = [];
+      var totalResponseTime = 0;
+      var officialSiteFound = false;
+
+      // 各クエリを実行
+      for (var i = 0; i < queries.length; i++) {
+        try {
+          var requestPayload = Object.assign({
+            api_key: apiKey,
+            query: queries[i],
+            search_depth: 'advanced',
+            max_results: 10,
+            include_domains: [], // 信頼できるドメインがあれば追加
+            exclude_domains: ['doda.jp', 'mynavi.jp', 'rikunabi.com', 'indeed.com'] // 求人サイトを除外
+          }, searchOptions);
+
+          var requestOptions = {
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
+            useCache: true,
+            cacheExpiration: Constants.CACHE_CONFIG.DURATION.LONG
+          };
+
+          var response = ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions);
+          var formatted = formatSearchResults(response);
+          
+          if (formatted.success && formatted.results) {
+            // 結果を処理
+            formatted.results.forEach(function(result) {
+              // 重複チェック
+              var isDuplicate = allResults.some(function(existing) {
+                return existing.url === result.url;
+              });
+              
+              if (!isDuplicate) {
+                // 公式サイトかどうかをチェック
+                if (result.url && (
+                  result.url.includes(companyName.toLowerCase().replace(/株式会社|有限会社/g, '')) ||
+                  result.title.includes('公式') ||
+                  result.title.includes('official')
+                )) {
+                  officialSiteFound = true;
+                  result.isOfficial = true;
+                }
+                
+                allResults.push(result);
+              }
+            });
+            
+            totalResponseTime += formatted.response_time || 0;
+          }
+          
+          // 公式サイトが見つかったら、残りのクエリはスキップ
+          if (officialSiteFound && i < queries.length - 1) {
+            Logger.logInfo('Official site found, skipping remaining queries');
+            break;
+          }
+          
+          // レート制限対策
+          if (i < queries.length - 1) {
+            Utilities.sleep(500);
+          }
+        } catch (queryError) {
+          Logger.logWarning('Search query failed: ' + queries[i], queryError);
+        }
       }
 
-      Logger.logDebug('Searching company with Tavily: ' + companyName);
+      // 結果を信頼性順にソート（公式サイトを優先）
+      allResults.sort(function(a, b) {
+        if (a.isOfficial && !b.isOfficial) return -1;
+        if (!a.isOfficial && b.isOfficial) return 1;
+        return 0;
+      });
 
-      var requestPayload = Object.assign({
-        api_key: apiKey,
-        query: query
-      }, searchOptions);
-
-      var requestOptions = {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
-        useCache: true,
-        cacheExpiration: Constants.CACHE_CONFIG.DURATION.LONG
+      var result = {
+        success: true,
+        query: queries[0],
+        results: allResults,
+        response_time: totalResponseTime,
+        officialSiteFound: officialSiteFound
       };
-
-      var response = ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions);
-      var formatted = formatSearchResults(response);
       
-      if (formatted.success) {
-        Logger.logInfo('Tavily search completed for: ' + companyName, {
-          resultCount: formatted.results.length,
-          responseTime: formatted.response_time
-        });
-      } else {
-        Logger.logWarning('Tavily search failed for: ' + companyName, {
-          error: formatted.error
-        });
-      }
+      Logger.logInfo('Targeted search completed for: ' + companyName, {
+        resultCount: result.results.length,
+        responseTime: result.response_time,
+        officialSiteFound: officialSiteFound,
+        queriesExecuted: queries.length
+      });
       
-      return formatted;
+      return result;
 
     } catch (error) {
       Logger.logError('Tavily API error for company: ' + companyName, error);
@@ -216,6 +300,219 @@ var TavilyClient = (function() {
 
     } catch (error) {
       Logger.logError('Exception in Tavily searchByPhoneNumber', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search for latest news about the company
+   */
+  function searchLatestNews(companyName, options) {
+    try {
+      var apiKey = getApiKey();
+      
+      // ニュース専用の検索クエリ
+      var queries = [
+        companyName + ' 最新ニュース プレスリリース 発表 ' + new Date().getFullYear(),
+        companyName + ' 新サービス 新製品 業績 決算発表',
+        companyName + ' 提携 買収 M&A 出資'
+      ];
+
+      Logger.logDebug('Searching latest news for: ' + companyName, {
+        queryCount: queries.length
+      });
+
+      var allResults = [];
+      var totalResponseTime = 0;
+
+      // 各クエリを実行
+      for (var i = 0; i < queries.length; i++) {
+        try {
+          var requestPayload = {
+            api_key: apiKey,
+            query: queries[i],
+            search_depth: 'advanced',
+            max_results: 5,
+            include_answer: false,
+            include_raw_content: true,
+            // 信頼できるニュースソースを優先
+            include_domains: [],
+            exclude_domains: ['doda.jp', 'mynavi.jp', 'rikunabi.com'] // 求人サイトを除外
+          };
+
+          var requestOptions = {
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
+            useCache: true,
+            cacheExpiration: Constants.CACHE_CONFIG.DURATION.SHORT // ニュースは短めのキャッシュ
+          };
+
+          var response = ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions);
+          var formatted = formatSearchResults(response);
+          
+          if (formatted.success && formatted.results) {
+            formatted.results.forEach(function(result) {
+              // 重複チェック
+              var isDuplicate = allResults.some(function(existing) {
+                return existing.url === result.url;
+              });
+              
+              if (!isDuplicate) {
+                // ニュースの日付情報を保持
+                result.category = 'news';
+                allResults.push(result);
+              }
+            });
+            
+            totalResponseTime += formatted.response_time || 0;
+          }
+          
+          // レート制限対策
+          if (i < queries.length - 1) {
+            Utilities.sleep(300);
+          }
+        } catch (queryError) {
+          Logger.logWarning('News search query failed: ' + queries[i], queryError);
+        }
+      }
+
+      // 日付順にソート（新しいものから）
+      allResults.sort(function(a, b) {
+        if (a.published_date && b.published_date) {
+          return new Date(b.published_date) - new Date(a.published_date);
+        }
+        return 0;
+      });
+
+      var result = {
+        success: true,
+        category: 'news',
+        results: allResults.slice(0, 10), // 最大10件に制限
+        response_time: totalResponseTime
+      };
+      
+      Logger.logInfo('News search completed for: ' + companyName, {
+        resultCount: result.results.length,
+        responseTime: result.response_time
+      });
+      
+      return result;
+
+    } catch (error) {
+      Logger.logError('News search error for company: ' + companyName, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search for recruitment information about the company
+   */
+  function searchRecruitmentInfo(companyName, options) {
+    try {
+      var apiKey = getApiKey();
+      
+      // 採用情報専用の検索クエリ
+      var queries = [
+        companyName + ' 採用情報 募集要項 キャリア採用',
+        companyName + ' 新卒採用 中途採用 求人',
+        companyName + ' 採用サイト 採用ページ careers'
+      ];
+
+      Logger.logDebug('Searching recruitment info for: ' + companyName, {
+        queryCount: queries.length
+      });
+
+      var allResults = [];
+      var totalResponseTime = 0;
+
+      // 各クエリを実行
+      for (var i = 0; i < queries.length; i++) {
+        try {
+          var requestPayload = {
+            api_key: apiKey,
+            query: queries[i],
+            search_depth: 'advanced',
+            max_results: 5,
+            include_answer: false,
+            include_raw_content: true,
+            // 採用情報は求人サイトも含める
+            include_domains: [],
+            exclude_domains: [] // 採用情報検索では除外しない
+          };
+
+          var requestOptions = {
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
+            useCache: true,
+            cacheExpiration: Constants.CACHE_CONFIG.DURATION.MEDIUM
+          };
+
+          var response = ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions);
+          var formatted = formatSearchResults(response);
+          
+          if (formatted.success && formatted.results) {
+            formatted.results.forEach(function(result) {
+              // 重複チェック
+              var isDuplicate = allResults.some(function(existing) {
+                return existing.url === result.url;
+              });
+              
+              if (!isDuplicate) {
+                // 採用情報のカテゴリを設定
+                result.category = 'recruitment';
+                
+                // 公式採用ページかどうかをチェック
+                if (result.url && (
+                  result.url.includes('career') ||
+                  result.url.includes('recruit') ||
+                  result.url.includes('採用')
+                )) {
+                  result.isOfficialRecruitment = true;
+                }
+                
+                allResults.push(result);
+              }
+            });
+            
+            totalResponseTime += formatted.response_time || 0;
+          }
+          
+          // レート制限対策
+          if (i < queries.length - 1) {
+            Utilities.sleep(300);
+          }
+        } catch (queryError) {
+          Logger.logWarning('Recruitment search query failed: ' + queries[i], queryError);
+        }
+      }
+
+      // 公式採用ページを優先してソート
+      allResults.sort(function(a, b) {
+        if (a.isOfficialRecruitment && !b.isOfficialRecruitment) return -1;
+        if (!a.isOfficialRecruitment && b.isOfficialRecruitment) return 1;
+        return 0;
+      });
+
+      var result = {
+        success: true,
+        category: 'recruitment',
+        results: allResults.slice(0, 10), // 最大10件に制限
+        response_time: totalResponseTime
+      };
+      
+      Logger.logInfo('Recruitment search completed for: ' + companyName, {
+        resultCount: result.results.length,
+        responseTime: result.response_time
+      });
+      
+      return result;
+
+    } catch (error) {
+      Logger.logError('Recruitment search error for company: ' + companyName, error);
       throw error;
     }
   }
@@ -278,6 +575,8 @@ var TavilyClient = (function() {
   return {
     searchCompany: searchCompany,
     searchByPhoneNumber: searchByPhoneNumber,
+    searchLatestNews: searchLatestNews,
+    searchRecruitmentInfo: searchRecruitmentInfo,
     getApiStats: getApiStats,
     testConnection: testConnection
   };

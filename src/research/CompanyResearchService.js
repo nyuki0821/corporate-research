@@ -188,6 +188,13 @@ var CompanyResearchService = (function() {
         throw new Error('Company name is required');
       }
 
+      // 電話番号を文字列に変換（数値の場合もあるため）
+      if (phoneNumber !== null && phoneNumber !== undefined && phoneNumber !== '') {
+        phoneNumber = String(phoneNumber).trim();
+      } else {
+        phoneNumber = '';
+      }
+
       Logger.logInfo('Starting research for company: ' + companyName);
 
       var companyId = generateCompanyId(companyName);
@@ -201,7 +208,7 @@ var CompanyResearchService = (function() {
       searchResults.push(companySearchResult);
 
       // Search using phone number if provided
-      if (phoneNumber && phoneNumber.trim() !== '') {
+      if (phoneNumber && phoneNumber !== '') {
         var phoneSearchResult = TavilyClient.searchByPhoneNumber(phoneNumber);
         searchResults.push(phoneSearchResult);
       }
@@ -221,16 +228,22 @@ var CompanyResearchService = (function() {
       // Validate search results
       var validation = validateSearchResults(combinedResults, companyName);
       
-      if (!validation.isValid) {
-        Logger.logWarning('Search validation failed for: ' + companyName, validation);
+      // 検索結果が少ない場合でも処理を続行（緩和されたバリデーション）
+      if (!validation.isValid && combinedResults.results.length === 0) {
+        Logger.logWarning('No search results found for: ' + companyName, validation);
         
         updateStats(false, Date.now() - startTime);
         return {
           success: false,
-          error: 'No relevant search results found',
+          error: 'No search results found',
           validation: validation,
           companyName: companyName
         };
+      } else if (!validation.isValid && combinedResults.results.length > 0) {
+        // 検索結果はあるが関連性が低い場合は警告を出して処理続行
+        Logger.logWarning('Search results have low relevance but proceeding: ' + companyName, validation);
+        validation.isValid = true; // 処理続行のためtrueに設定
+        validation.confidence = Math.max(validation.confidence, 0.3); // 最低限の信頼度を設定
       }
 
       Logger.logInfo('Search completed for: ' + companyName, {

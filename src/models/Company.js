@@ -148,7 +148,7 @@ var Company = (function() {
 
   Company.prototype.toHeadquartersSpreadsheetRow = function() {
     // Map to headquarters sheet columns based on Constants.SHEET_CONFIG.HEADQUARTERS_COLUMNS
-    return [
+    var rowData = [
       this.id,                          // 企業ID
       this.companyName,                 // 企業名
       this.officialName,                // 正式企業名
@@ -175,6 +175,23 @@ var Company = (function() {
       this.errorMessage,                // エラー内容
       this.sourceUrls.join(';')         // 情報ソースURL
     ];
+    
+    // デバッグ用：実際に保存されるデータをログ出力
+    if (typeof Logger !== 'undefined') {
+      Logger.logDebug('Company spreadsheet row data', {
+        id: this.id,
+        companyName: this.companyName,
+        phone: this.phone,
+        prefecture: this.prefecture,
+        reliabilityScore: parseFloat(this.reliabilityScore) || 0,
+        nonNullFields: rowData.filter(function(field) {
+          return field !== null && field !== undefined && field !== '';
+        }).length,
+        totalFields: rowData.length
+      });
+    }
+    
+    return rowData;
   };
 
   Company.prototype.toJSON = function() {

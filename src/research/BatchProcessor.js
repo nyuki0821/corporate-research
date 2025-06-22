@@ -149,28 +149,57 @@ var BatchProcessor = (function() {
                 var saveError = null;
                 
                 try {
+                  // Companyオブジェクトを作成
+                  var companyData = result.data;
+                  var companyObj = new Company({
+                    id: company.id,
+                    companyName: companyData.companyName || company.name,
+                    officialName: companyData.officialName || companyData.companyName || company.name,
+                    phone: companyData.phone || company.phoneNumber,
+                    industryLarge: companyData.industryLarge,
+                    industryMedium: companyData.industryMedium,
+                    employees: companyData.employees,
+                    establishedYear: companyData.establishedYear,
+                    capital: companyData.capital,
+                    listingStatus: companyData.listingStatus,
+                    postalCode: companyData.postalCode,
+                    prefecture: companyData.prefecture,
+                    city: companyData.city,
+                    addressDetail: companyData.addressDetail,
+                    representativeName: companyData.representativeName,
+                    representativeTitle: companyData.representativeTitle,
+                    philosophy: companyData.philosophy,
+                    latestNews: companyData.latestNews,
+                    recruitmentStatus: companyData.recruitmentStatus,
+                    website: companyData.website,
+                    reliabilityScore: companyData.reliabilityScore,
+                    branches: companyData.branches || [],
+                    processedAt: new Date().toISOString(),
+                    processingResult: 'SUCCESS'
+                  });
+                  
                   // 本社情報を保存
-                  if (!SpreadsheetService.saveHeadquartersInfo(result.company)) {
+                  if (!SpreadsheetService.saveHeadquartersInfo(companyObj)) {
                     throw new Error('Failed to save headquarters info');
                   }
                   Logger.logInfo('本社情報保存完了: ' + company.name);
                   
                   // 支店情報を保存（存在する場合）
-                  if (result.branches && result.branches.length > 0) {
-                    Logger.logInfo('支店情報を保存中: ' + company.name + ' (' + result.branches.length + '件)');
+                  if (companyData.branches && companyData.branches.length > 0) {
+                    Logger.logInfo('支店情報を保存中: ' + company.name + ' (' + companyData.branches.length + '件)');
                     
                     // 支店情報の詳細をログ出力
-                    result.branches.forEach(function(branch, index) {
+                    companyData.branches.forEach(function(branch, index) {
                       Logger.logDebug('支店' + (index + 1) + ': ' + 
                         (branch.name || '名称不明') + ' (' + (branch.type || 'タイプ不明') + ') - ' +
                         (branch.prefecture || '') + (branch.city || '') + ' ' +
                         (branch.phone || '電話番号なし'));
                     });
                     
-                    if (!SpreadsheetService.saveBranchesInfo(result.company.id, result.branches)) {
+                    if (!SpreadsheetService.saveBranchesInfo(company.id, companyData.branches)) {
                       throw new Error('Failed to save branches info');
                     }
-                    Logger.logInfo('支店情報保存完了: ' + company.name + ' (' + result.branches.length + '件)');
+                    Logger.logInfo('支店情報保存完了: ' + company.name + ' (' + companyData.branches.length + '件)');
                   } else {
                     Logger.logInfo('支店情報なし: ' + company.name + ' (抽出されませんでした)');
                   }
