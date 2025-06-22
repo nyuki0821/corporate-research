@@ -112,62 +112,63 @@ var BatchProcessor = (function() {
           // Fallback: simulate processing for testing
           Logger.logWarning('CompanyResearchService not available, using mock processing');
           
-          setTimeout(function() {
-            // Mock successful processing
+          // Google Apps ScriptではsetTimeoutの代わりにUtilities.sleepを使用
+          Utilities.sleep(1000); // Simulate processing time
+          
+          // Mock successful processing
+          if (typeof SpreadsheetService !== 'undefined') {
+            SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了（テスト）', '');
+          }
+          
+          updateStats(true);
+          resolve({
+            success: true,
+            company: company,
+            data: { name: company.name, mockData: true }
+          });
+          
+          return;
+        }
+        
+        // Use actual research service
+        try {
+          var result = CompanyResearchService.researchCompany(company.name, company.phone);
+          
+          if (result.success) {
+            // Save to spreadsheet
             if (typeof SpreadsheetService !== 'undefined') {
-              SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了（テスト）', '');
+              SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了', '');
+              SpreadsheetService.saveHeadquartersInfo(result.company);
+              
+              if (result.branches && result.branches.length > 0) {
+                SpreadsheetService.saveBranchesInfo(result.company.id, result.branches);
+              }
             }
             
             updateStats(true);
             resolve({
               success: true,
               company: company,
-              data: { name: company.name, mockData: true }
+              data: result
             });
-          }, 1000); // Simulate processing time
+          } else {
+            throw new Error(result.error || 'Research failed');
+          }
+        } catch (error) {
+          Logger.logError('Company processing failed: ' + company.name, error);
           
-          return;
-        }
-        
-        // Use actual research service
-        CompanyResearchService.researchCompany(company.name, company.phone)
-          .then(function(result) {
-            if (result.success) {
-              // Save to spreadsheet
-              if (typeof SpreadsheetService !== 'undefined') {
-                SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了', '');
-                SpreadsheetService.saveHeadquartersInfo(result.company);
-                
-                if (result.branches && result.branches.length > 0) {
-                  SpreadsheetService.saveBranchesInfo(result.company.id, result.branches);
-                }
-              }
-              
-              updateStats(true);
-              resolve({
-                success: true,
-                company: company,
-                data: result
-              });
-            } else {
-              throw new Error(result.error || 'Research failed');
-            }
-          })
-          .catch(function(error) {
-            Logger.logError('Company processing failed: ' + company.name, error);
-            
-            // Update status to error
-            if (typeof SpreadsheetService !== 'undefined') {
-              SpreadsheetService.updateCompanyStatus(company.rowIndex, 'エラー', error.message);
-            }
-            
-            updateStats(false);
-            resolve({
-              success: false,
-              company: company,
-              error: error
-            });
+          // Update status to error
+          if (typeof SpreadsheetService !== 'undefined') {
+            SpreadsheetService.updateCompanyStatus(company.rowIndex, 'エラー', error.message);
+          }
+          
+          updateStats(false);
+          resolve({
+            success: false,
+            company: company,
+            error: error
           });
+        }
           
       } catch (error) {
         Logger.logError('Exception in processSingleCompany', error);
@@ -214,7 +215,9 @@ var BatchProcessor = (function() {
             
             // Continue with delay
             if (currentIndex < companies.length) {
-              setTimeout(processNext, delayMs);
+              // Google Apps ScriptではsetTimeoutの代わりにUtilities.sleepを使用
+              Utilities.sleep(delayMs);
+              processNext();
             } else {
               resolve(results);
             }

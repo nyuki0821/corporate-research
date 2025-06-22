@@ -94,66 +94,58 @@ var TavilyClient = (function() {
    * Search for company information
    */
   function searchCompany(companyName, options) {
-    return new Promise(function(resolve, reject) {
-      try {
-        var apiKey = getApiKey();
-        var searchOptions = buildSearchOptions(options);
-        
-        // Build search query for company
-        var query = companyName + ' 会社 企業情報 本社 設立 資本金 従業員数';
-        if (options && options.additionalTerms) {
-          query += ' ' + options.additionalTerms;
-        }
-
-        Logger.logDebug('Searching company with Tavily: ' + companyName);
-
-        var requestPayload = Object.assign({
-          api_key: apiKey,
-          query: query
-        }, searchOptions);
-
-        var requestOptions = {
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
-          useCache: true,
-          cacheExpiration: Constants.CACHE_CONFIG.DURATION.LONG
-        };
-
-        ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions)
-          .then(function(response) {
-            var formatted = formatSearchResults(response);
-            
-            if (formatted.success) {
-              Logger.logInfo('Tavily search completed for: ' + companyName, {
-                resultCount: formatted.results.length,
-                responseTime: formatted.response_time
-              });
-            } else {
-              Logger.logWarning('Tavily search failed for: ' + companyName, {
-                error: formatted.error
-              });
-            }
-            
-            resolve(formatted);
-          })
-          .catch(function(error) {
-            Logger.logError('Tavily API error for company: ' + companyName, error);
-            ErrorHandler.handleError(error, {
-              function: 'searchCompany',
-              companyName: companyName,
-              apiService: 'Tavily'
-            });
-            
-            reject(error);
-          });
-
-      } catch (error) {
-        Logger.logError('Exception in Tavily searchCompany', error);
-        reject(error);
+    try {
+      var apiKey = getApiKey();
+      var searchOptions = buildSearchOptions(options);
+      
+      // Build search query for company
+      var query = companyName + ' 会社 企業情報 本社 設立 資本金 従業員数';
+      if (options && options.additionalTerms) {
+        query += ' ' + options.additionalTerms;
       }
-    });
+
+      Logger.logDebug('Searching company with Tavily: ' + companyName);
+
+      var requestPayload = Object.assign({
+        api_key: apiKey,
+        query: query
+      }, searchOptions);
+
+      var requestOptions = {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
+        useCache: true,
+        cacheExpiration: Constants.CACHE_CONFIG.DURATION.LONG
+      };
+
+      var response = ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions);
+      var formatted = formatSearchResults(response);
+      
+      if (formatted.success) {
+        Logger.logInfo('Tavily search completed for: ' + companyName, {
+          resultCount: formatted.results.length,
+          responseTime: formatted.response_time
+        });
+      } else {
+        Logger.logWarning('Tavily search failed for: ' + companyName, {
+          error: formatted.error
+        });
+      }
+      
+      return formatted;
+
+    } catch (error) {
+      Logger.logError('Tavily API error for company: ' + companyName, error);
+      ErrorHandler.handleError(error, {
+        function: 'searchCompany',
+        companyName: companyName,
+        apiService: 'Tavily'
+      });
+      
+      throw error;
+    }
   }
 
   /**
@@ -170,92 +162,81 @@ var TavilyClient = (function() {
 
     var query = searchQueries[searchType] || searchQueries['corporate'];
     
-    return new Promise(function(resolve, reject) {
-      try {
-        var apiKey = getApiKey();
-        
-        Logger.logDebug('Searching company details with Tavily: ' + companyName + ' (' + searchType + ')');
+    try {
+      var apiKey = getApiKey();
+      
+      Logger.logDebug('Searching company details with Tavily: ' + companyName + ' (' + searchType + ')');
 
-        var requestPayload = {
-          api_key: apiKey,
-          query: query,
-          search_depth: 'advanced',
-          include_answer: true,
-          max_results: 5
-        };
+      var requestPayload = {
+        api_key: apiKey,
+        query: query,
+        search_depth: 'advanced',
+        include_answer: true,
+        max_results: 5
+      };
 
-        var requestOptions = {
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
-          useCache: true,
-          cacheExpiration: Constants.CACHE_CONFIG.DURATION.MEDIUM
-        };
+      var requestOptions = {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
+        useCache: true,
+        cacheExpiration: Constants.CACHE_CONFIG.DURATION.MEDIUM
+      };
 
-        ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions)
-          .then(function(response) {
-            var formatted = formatSearchResults(response);
-            resolve(formatted);
-          })
-          .catch(reject);
+      var response = ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions);
+      var formatted = formatSearchResults(response);
+      return formatted;
 
-      } catch (error) {
-        Logger.logError('Exception in Tavily searchCompanyDetails', error);
-        reject(error);
-      }
-    });
+    } catch (error) {
+      Logger.logError('Exception in Tavily searchCompanyDetails', error);
+      throw error;
+    }
   }
 
   /**
    * Search for company by phone number
    */
   function searchByPhoneNumber(phoneNumber) {
-    return new Promise(function(resolve, reject) {
-      try {
-        if (!phoneNumber || phoneNumber.trim() === '') {
-          resolve({
-            success: false,
-            error: 'Phone number not provided',
-            results: []
-          });
-          return;
-        }
-
-        var query = phoneNumber + ' 会社 企業 法人';
-        var apiKey = getApiKey();
-        
-        Logger.logDebug('Searching by phone number with Tavily: ' + phoneNumber);
-
-        var requestPayload = {
-          api_key: apiKey,
-          query: query,
-          search_depth: 'basic',
-          include_answer: true,
-          max_results: 5
+    try {
+      if (!phoneNumber || phoneNumber.trim() === '') {
+        return {
+          success: false,
+          error: 'Phone number not provided',
+          results: []
         };
-
-        var requestOptions = {
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
-          useCache: true,
-          cacheExpiration: Constants.CACHE_CONFIG.DURATION.LONG
-        };
-
-        ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions)
-          .then(function(response) {
-            var formatted = formatSearchResults(response);
-            resolve(formatted);
-          })
-          .catch(reject);
-
-      } catch (error) {
-        Logger.logError('Exception in Tavily searchByPhoneNumber', error);
-        reject(error);
       }
-    });
+
+      var query = phoneNumber + ' 会社 企業 法人';
+      var apiKey = getApiKey();
+      
+      Logger.logDebug('Searching by phone number with Tavily: ' + phoneNumber);
+
+      var requestPayload = {
+        api_key: apiKey,
+        query: query,
+        search_depth: 'basic',
+        include_answer: true,
+        max_results: 5
+      };
+
+      var requestOptions = {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
+        useCache: true,
+        cacheExpiration: Constants.CACHE_CONFIG.DURATION.LONG
+      };
+
+      var response = ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions);
+      var formatted = formatSearchResults(response);
+      return formatted;
+
+    } catch (error) {
+      Logger.logError('Exception in Tavily searchByPhoneNumber', error);
+      throw error;
+    }
   }
 
   /**
@@ -275,53 +256,41 @@ var TavilyClient = (function() {
    * Test API connection
    */
   function testConnection() {
-    return new Promise(function(resolve, reject) {
-      try {
-        var apiKey = getApiKey();
-        
-        Logger.logInfo('Testing Tavily API connection');
+    try {
+      var apiKey = getApiKey();
+      
+      Logger.logInfo('Testing Tavily API connection');
 
-        var requestPayload = {
-          api_key: apiKey,
-          query: 'test',
-          max_results: 1
-        };
+      var requestPayload = {
+        api_key: apiKey,
+        query: 'test',
+        max_results: 1
+      };
 
-        var requestOptions = {
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          timeout: 10000,
-          useCache: false
-        };
+      var requestOptions = {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000,
+        useCache: false
+      };
 
-        ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions)
-          .then(function(response) {
-            Logger.logInfo('Tavily API connection test successful');
-            resolve({
-              success: true,
-              message: 'API connection successful',
-              provider: 'Tavily'
-            });
-          })
-          .catch(function(error) {
-            Logger.logError('Tavily API connection test failed', error);
-            resolve({
-              success: false,
-              error: error.message,
-              provider: 'Tavily'
-            });
-          });
+      var response = ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions);
+      Logger.logInfo('Tavily API connection test successful');
+      return {
+        success: true,
+        message: 'API connection successful',
+        provider: 'Tavily'
+      };
 
-      } catch (error) {
-        Logger.logError('Exception in Tavily testConnection', error);
-        resolve({
-          success: false,
-          error: error.message,
-          provider: 'Tavily'
-        });
-      }
-    });
+    } catch (error) {
+      Logger.logError('Tavily API connection test failed', error);
+      return {
+        success: false,
+        error: error.message,
+        provider: 'Tavily'
+      };
+    }
   }
 
   // Return public API

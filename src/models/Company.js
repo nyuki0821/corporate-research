@@ -10,12 +10,22 @@
 var Company = (function() {
   
   /**
+   * Generate unique company ID
+   * @private
+   */
+  function generateCompanyId(companyName) {
+    var timestamp = Date.now();
+    var hash = (companyName || 'UNKNOWN').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 10);
+    return 'COMP_' + hash + '_' + timestamp;
+  }
+  
+  /**
    * Company constructor
    * @param {Object} data - Company data
    */
   function Company(data) {
     // Required fields
-    this.id = data.id || '';
+    this.id = data.id || generateCompanyId(data.companyName || '');
     this.companyName = data.companyName || '';
     
     // Basic information

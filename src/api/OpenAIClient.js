@@ -96,19 +96,18 @@ var OpenAIClient = (function() {
    * Extract company information from search results
    */
   function extractCompanyInfo(companyName, searchResults, phoneNumber) {
-    return new Promise(function(resolve, reject) {
-      try {
-        Logger.logDebug('Extracting company info with OpenAI: ' + companyName);
+    try {
+      Logger.logDebug('Extracting company info with OpenAI: ' + companyName);
 
-        // Build context from search results
-        var context = '';
-        if (searchResults && searchResults.results) {
-          context = searchResults.results.map(function(result) {
-            return 'タイトル: ' + result.title + '\n内容: ' + result.content;
-          }).join('\n\n');
-        }
+      // Build context from search results
+      var context = '';
+      if (searchResults && searchResults.results) {
+        context = searchResults.results.map(function(result) {
+          return 'タイトル: ' + result.title + '\n内容: ' + result.content;
+        }).join('\n\n');
+      }
 
-        var systemPrompt = `あなたは企業情報抽出の専門家です。提供された検索結果から企業の基本情報を抽出し、構造化されたJSONで回答してください。
+      var systemPrompt = `あなたは企業情報抽出の専門家です。提供された検索結果から企業の基本情報を抽出し、構造化されたJSONで回答してください。
 
 抽出する項目:
 - companyName: 企業名
@@ -135,7 +134,7 @@ var OpenAIClient = (function() {
 情報が見つからない場合は null を設定してください。
 信頼性スコアは情報の完全性と信頼性に基づいて設定してください。`;
 
-        var userPrompt = `企業名: ${companyName}
+      var userPrompt = `企業名: ${companyName}
 ${phoneNumber ? '電話番号: ' + phoneNumber : ''}
 
 検索結果:
@@ -143,71 +142,65 @@ ${context}
 
 上記の情報から企業の基本情報をJSONで抽出してください。`;
 
-        var messages = [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ];
+      var messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ];
 
-        var requestData = buildChatRequest(messages, {
-          model: 'gpt-4o-mini',
-          max_tokens: 2000,
-          temperature: 0.1
+      var requestData = buildChatRequest(messages, {
+        model: 'gpt-4o-mini',
+        max_tokens: 2000,
+        temperature: 0.1
+      });
+
+      var requestOptions = {
+        headers: buildHeaders(),
+        timeout: ConfigManager.getNumber('EXTRACTION_TIMEOUT_MS', 60000),
+        useCache: true,
+        cacheExpiration: Constants.CACHE_CONFIG.DURATION.MEDIUM
+      };
+
+      var response = ApiBase.post(_baseUrl + '/chat/completions', requestData, requestOptions);
+      
+      if (!response.choices || response.choices.length === 0) {
+        throw new Error('No response choices returned from OpenAI');
+      }
+
+      var content = response.choices[0].message.content;
+      var parsed = parseCompanyInfo(content);
+
+      if (parsed.success) {
+        Logger.logInfo('Company info extracted successfully: ' + companyName, {
+          fieldsExtracted: Object.keys(parsed.data).length,
+          reliabilityScore: parsed.data.reliabilityScore
         });
 
-        var requestOptions = {
-          headers: buildHeaders(),
-          timeout: ConfigManager.getNumber('EXTRACTION_TIMEOUT_MS', 60000),
-          useCache: true,
-          cacheExpiration: Constants.CACHE_CONFIG.DURATION.MEDIUM
+        return {
+          success: true,
+          data: parsed.data,
+          usage: response.usage,
+          model: requestData.model
         };
-
-        ApiBase.post(_baseUrl + '/chat/completions', requestData, requestOptions)
-          .then(function(response) {
-            if (!response.choices || response.choices.length === 0) {
-              throw new Error('No response choices returned from OpenAI');
-            }
-
-            var content = response.choices[0].message.content;
-            var parsed = parseCompanyInfo(content);
-
-            if (parsed.success) {
-              Logger.logInfo('Company info extracted successfully: ' + companyName, {
-                fieldsExtracted: Object.keys(parsed.data).length,
-                reliabilityScore: parsed.data.reliabilityScore
-              });
-
-              resolve({
-                success: true,
-                data: parsed.data,
-                usage: response.usage,
-                model: requestData.model
-              });
-            } else {
-              Logger.logWarning('Failed to extract structured company info: ' + companyName);
-              resolve({
-                success: false,
-                error: parsed.error,
-                rawResponse: content,
-                usage: response.usage
-              });
-            }
-          })
-          .catch(function(error) {
-            Logger.logError('OpenAI API error for company: ' + companyName, error);
-            ErrorHandler.handleError(error, {
-              function: 'extractCompanyInfo',
-              companyName: companyName,
-              apiService: 'OpenAI'
-            });
-            
-            reject(error);
-          });
-
-      } catch (error) {
-        Logger.logError('Exception in OpenAI extractCompanyInfo', error);
-        reject(error);
+      } else {
+        Logger.logWarning('Failed to extract structured company info: ' + companyName);
+        return {
+          success: false,
+          error: parsed.error,
+          rawResponse: content,
+          usage: response.usage
+        };
       }
-    });
+
+    } catch (error) {
+      Logger.logError('OpenAI API error for company: ' + companyName, error);
+      ErrorHandler.handleError(error, {
+        function: 'extractCompanyInfo',
+        companyName: companyName,
+        apiService: 'OpenAI'
+      });
+      
+      throw error;
+    }
   }
 
   /**
@@ -362,54 +355,42 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
    * Test API connection
    */
   function testConnection() {
-    return new Promise(function(resolve, reject) {
-      try {
-        Logger.logInfo('Testing OpenAI API connection');
+    try {
+      Logger.logInfo('Testing OpenAI API connection');
 
-        var messages = [
-          { role: 'user', content: 'Hello, please respond with "API connection successful"' }
-        ];
+      var messages = [
+        { role: 'user', content: 'Hello, please respond with "API connection successful"' }
+      ];
 
-        var requestData = buildChatRequest(messages, {
-          model: 'gpt-4o-mini',
-          max_tokens: 50,
-          temperature: 0
-        });
+      var requestData = buildChatRequest(messages, {
+        model: 'gpt-4o-mini',
+        max_tokens: 50,
+        temperature: 0
+      });
 
-        var requestOptions = {
-          headers: buildHeaders(),
-          timeout: 10000,
-          useCache: false
-        };
+      var requestOptions = {
+        headers: buildHeaders(),
+        timeout: 10000,
+        useCache: false
+      };
 
-        ApiBase.post(_baseUrl + '/chat/completions', requestData, requestOptions)
-          .then(function(response) {
-            Logger.logInfo('OpenAI API connection test successful');
-            resolve({
-              success: true,
-              message: 'API connection successful',
-              provider: 'OpenAI',
-              model: requestData.model
-            });
-          })
-          .catch(function(error) {
-            Logger.logError('OpenAI API connection test failed', error);
-            resolve({
-              success: false,
-              error: error.message,
-              provider: 'OpenAI'
-            });
-          });
+      var response = ApiBase.post(_baseUrl + '/chat/completions', requestData, requestOptions);
+      Logger.logInfo('OpenAI API connection test successful');
+      return {
+        success: true,
+        message: 'API connection successful',
+        provider: 'OpenAI',
+        model: requestData.model
+      };
 
-      } catch (error) {
-        Logger.logError('Exception in OpenAI testConnection', error);
-        resolve({
-          success: false,
-          error: error.message,
-          provider: 'OpenAI'
-        });
-      }
-    });
+    } catch (error) {
+      Logger.logError('OpenAI API connection test failed', error);
+      return {
+        success: false,
+        error: error.message,
+        provider: 'OpenAI'
+      };
+    }
   }
 
   /**

@@ -181,162 +181,134 @@ var CompanyResearchService = (function() {
    * Research company information
    */
   function researchCompany(companyName, phoneNumber) {
-    return new Promise(function(resolve, reject) {
-      var startTime = Date.now();
-      
-      try {
-        if (!companyName || companyName.trim() === '') {
-          throw new Error('Company name is required');
-        }
-
-        Logger.logInfo('Starting research for company: ' + companyName);
-
-        var companyId = generateCompanyId(companyName);
-        var searchPromises = [];
-        
-        // Search using company name
-        searchPromises.push(
-          TavilyClient.searchCompany(companyName, {
-            additionalTerms: '本社 設立 従業員数 資本金',
-            max_results: 8
-          })
-        );
-
-        // Search using phone number if provided
-        if (phoneNumber && phoneNumber.trim() !== '') {
-          searchPromises.push(
-            TavilyClient.searchByPhoneNumber(phoneNumber)
-          );
-        }
-
-        Promise.all(searchPromises)
-          .then(function(searchResults) {
-            // Combine search results
-            var combinedResults = {
-              success: true,
-              results: []
-            };
-
-            searchResults.forEach(function(result) {
-              if (result.success && result.results) {
-                combinedResults.results = combinedResults.results.concat(result.results);
-              }
-            });
-
-            // Validate search results
-            var validation = validateSearchResults(combinedResults, companyName);
-            
-            if (!validation.isValid) {
-              Logger.logWarning('Search validation failed for: ' + companyName, validation);
-              
-              updateStats(false, Date.now() - startTime);
-              resolve({
-                success: false,
-                error: 'No relevant search results found',
-                validation: validation,
-                companyName: companyName
-              });
-              return;
-            }
-
-            Logger.logInfo('Search completed for: ' + companyName, {
-              totalResults: combinedResults.results.length,
-              confidence: validation.confidence
-            });
-
-            // Extract company information using AI
-            OpenAIClient.extractCompanyInfo(companyName, combinedResults, phoneNumber)
-              .then(function(extractionResult) {
-                if (!extractionResult.success) {
-                  Logger.logWarning('Information extraction failed for: ' + companyName);
-                  
-                  updateStats(false, Date.now() - startTime);
-                  resolve({
-                    success: false,
-                    error: 'Failed to extract company information',
-                    extractionResult: extractionResult,
-                    searchValidation: validation
-                  });
-                  return;
-                }
-
-                // Calculate reliability score
-                var reliabilityScore = calculateReliabilityScore(
-                  extractionResult.data,
-                  validation,
-                  extractionResult.success
-                );
-
-                // Add metadata to extracted data
-                var enhancedData = Object.assign({}, extractionResult.data, {
-                  id: companyId,
-                  reliabilityScore: reliabilityScore,
-                  processedAt: new Date().toISOString(),
-                  processingResult: 'SUCCESS',
-                  sourceUrls: combinedResults.results.map(function(r) { return r.url; }).slice(0, 5)
-                });
-
-                // Create company object
-                var company = createCompanyObject(
-                  enhancedData,
-                  companyId,
-                  enhancedData.sourceUrls
-                );
-
-                var duration = Date.now() - startTime;
-                updateStats(true, duration);
-
-                Logger.logInfo('Research completed successfully for: ' + companyName, {
-                  duration: duration + 'ms',
-                  reliabilityScore: reliabilityScore,
-                  fieldsExtracted: Object.keys(extractionResult.data).length
-                });
-
-                resolve({
-                  success: true,
-                  company: company,
-                  searchValidation: validation,
-                  extractionResult: extractionResult,
-                  processingTime: duration,
-                  metadata: {
-                    searchResultCount: combinedResults.results.length,
-                    confidence: validation.confidence,
-                    reliabilityScore: reliabilityScore
-                  }
-                });
-              })
-              .catch(function(extractionError) {
-                Logger.logError('Extraction error for company: ' + companyName, extractionError);
-                
-                updateStats(false, Date.now() - startTime);
-                ErrorHandler.handleError(extractionError, {
-                  function: 'researchCompany',
-                  companyName: companyName,
-                  stage: 'extraction'
-                });
-                
-                reject(extractionError);
-              });
-          })
-          .catch(function(searchError) {
-            Logger.logError('Search error for company: ' + companyName, searchError);
-            
-            updateStats(false, Date.now() - startTime);
-            ErrorHandler.handleError(searchError, {
-              function: 'researchCompany',
-              companyName: companyName,
-              stage: 'search'
-            });
-            
-            reject(searchError);
-          });
-
-      } catch (error) {
-        updateStats(false, Date.now() - startTime);
-        Logger.logError('Exception in researchCompany', error);
-        reject(error);
+    var startTime = Date.now();
+    
+    try {
+      if (!companyName || companyName.trim() === '') {
+        throw new Error('Company name is required');
       }
-    });
+
+      Logger.logInfo('Starting research for company: ' + companyName);
+
+      var companyId = generateCompanyId(companyName);
+      var searchResults = [];
+      
+      // Search using company name
+      var companySearchResult = TavilyClient.searchCompany(companyName, {
+        additionalTerms: '本社 設立 従業員数 資本金',
+        max_results: 8
+      });
+      searchResults.push(companySearchResult);
+
+      // Search using phone number if provided
+      if (phoneNumber && phoneNumber.trim() !== '') {
+        var phoneSearchResult = TavilyClient.searchByPhoneNumber(phoneNumber);
+        searchResults.push(phoneSearchResult);
+      }
+
+      // Combine search results
+      var combinedResults = {
+        success: true,
+        results: []
+      };
+
+      searchResults.forEach(function(result) {
+        if (result.success && result.results) {
+          combinedResults.results = combinedResults.results.concat(result.results);
+        }
+      });
+
+      // Validate search results
+      var validation = validateSearchResults(combinedResults, companyName);
+      
+      if (!validation.isValid) {
+        Logger.logWarning('Search validation failed for: ' + companyName, validation);
+        
+        updateStats(false, Date.now() - startTime);
+        return {
+          success: false,
+          error: 'No relevant search results found',
+          validation: validation,
+          companyName: companyName
+        };
+      }
+
+      Logger.logInfo('Search completed for: ' + companyName, {
+        totalResults: combinedResults.results.length,
+        confidence: validation.confidence
+      });
+
+      // Extract company information using AI
+      var extractionResult = OpenAIClient.extractCompanyInfo(companyName, combinedResults, phoneNumber);
+      
+      if (!extractionResult.success) {
+        Logger.logWarning('Information extraction failed for: ' + companyName);
+        
+        updateStats(false, Date.now() - startTime);
+        return {
+          success: false,
+          error: 'Failed to extract company information',
+          extractionResult: extractionResult,
+          searchValidation: validation
+        };
+      }
+
+      // Calculate reliability score
+      var reliabilityScore = calculateReliabilityScore(
+        extractionResult.data,
+        validation,
+        extractionResult.success
+      );
+
+      // Add metadata to extracted data
+      var enhancedData = Object.assign({}, extractionResult.data, {
+        id: companyId,
+        reliabilityScore: reliabilityScore,
+        processedAt: new Date().toISOString(),
+        processingResult: 'SUCCESS',
+        sourceUrls: combinedResults.results.map(function(r) { return r.url; }).slice(0, 5)
+      });
+
+      // Create company object
+      var company = createCompanyObject(
+        enhancedData,
+        companyId,
+        enhancedData.sourceUrls
+      );
+
+      var duration = Date.now() - startTime;
+      updateStats(true, duration);
+
+      Logger.logInfo('Research completed successfully for: ' + companyName, {
+        duration: duration + 'ms',
+        reliabilityScore: reliabilityScore,
+        fieldsExtracted: Object.keys(extractionResult.data).length
+      });
+
+      return {
+        success: true,
+        company: company,
+        searchValidation: validation,
+        extractionResult: extractionResult,
+        processingTime: duration,
+        metadata: {
+          searchResultCount: combinedResults.results.length,
+          confidence: validation.confidence,
+          reliabilityScore: reliabilityScore
+        }
+      };
+
+    } catch (error) {
+      updateStats(false, Date.now() - startTime);
+      Logger.logError('Exception in researchCompany', error);
+      ErrorHandler.handleError(error, {
+        function: 'researchCompany',
+        companyName: companyName,
+        stage: 'general'
+      });
+      
+      throw error;
+    }
   }
 
   /**
