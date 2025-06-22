@@ -196,521 +196,132 @@ GPT-4を使用した情報抽出：
 
 ## 🧪 テスト実行ガイド
 
-### テスト階層の概要
-本システムには4段階のテスト階層が実装されています：
+このプロジェクトでは、品質を保証するために4階層のテスト戦略を採用しています。これはテストピラミッドの考え方を拡張したもので、それぞれのテストが異なる目的を持っています。
 
-| テスト種別 | 目的 | 実行環境 | 所要時間 |
-|------------|------|----------|----------|
-| **🔧 単体テスト** | 各モジュールの個別機能検証 | モック環境 | ~30ms |
-| **🔗 統合テスト** | 複数サービス間の連携検証 | モック環境 | ~10ms |
-| **🌐 E2Eテスト** | 完全ワークフローの動作検証 | モック環境 | ~150ms |
-| **🚀 本番環境テスト** | 実際のAPI・データでの動作検証 | 本番環境 | 数分 |
+```mermaid
+graph TD
+    subgraph "本番環境"
+        D[🚀 本番テスト]
+    end
+    subgraph "モック環境"
+        C[🌐 E2Eテスト]
+        B[🔗 統合テスト]
+        A[🔧 単体テスト]
+    end
+    A --> B --> C --> D
+```
+
+| テスト種別 | 目的 | 実行環境 | 特徴 |
+|---|---|---|---|
+| **単体テスト** | モジュール単体の動作を検証 | モック | 高速・高頻度で実行 |
+| **統合テスト** | 複数モジュール間の連携を検証 | モック | 単体テストより広範囲 |
+| **E2Eテスト** | ユーザーの操作フロー全体を検証 | モック | 実運用に近いシナリオ |
+| **本番テスト** | 実際のAPIやデータで最終検証 | **本番** | リリース前の最終確認 |
 
 ---
 
-## 📋 1. 開発環境テスト（モック使用）
+### 1. 単体テスト (Unit Tests)
 
-### 基本テスト実行
+**目的**:
+個別の関数やクラス（モジュール）が、意図した通りに正しく動作するかを検証します。外部の依存関係（API、スプレッドシートなど）はすべてモックに置き換えて、テスト対象のロジックのみに集中します。
 
-Google Apps Scriptエディタで以下の関数を実行：
+**実行方法**:
+- **すべての単体テストを実行**: `TestRunner.js` -> `runUnitTests()`
+- **特定のコンポーネントのテストを実行**: `TestRunner.js` -> `runComponentTests('コンポーネント名')`
+  - 例: `runComponentTests('ConfigManager')`
 
-**📁 実行ファイル**: `src/tests/framework/TestRunner.js`
-
-```javascript
-// 🎯 推奨：全テストの実行
-runAllTests();           // TestRunner.js の関数
-
-// 個別テストの実行
-runUnitTests();          // TestRunner.js の関数（単体テスト）
-runIntegrationTests();   // TestRunner.js の関数（統合テスト）
-runE2ETests();          // TestRunner.js の関数（E2Eテスト）
-
-// クイックテスト（開発時推奨）
-runQuickTests();        // TestRunner.js の関数（重要テストのみ）
-
-// コンポーネント別テスト
-runComponentTests('ConfigManager');  // 特定コンポーネントのテスト
-runComponentTests('TavilyClient');   // TavilyClientのテスト
-runComponentTests('Company');        // Companyモデルのテスト
-```
-
-### 📋 実行手順（詳細）
-
-1. **Google Apps Scriptエディタを開く**
-2. **左側のファイル一覧から `TestRunner.js` を選択**
-3. **上部の関数選択ドロップダウンから実行したい関数を選択**
-4. **▶️ 実行ボタンをクリック**
-
-### 📁 各テストファイルの場所と実行関数
-
-| テスト種別 | ファイル場所 | 主要実行関数 |
-|------------|-------------|-------------|
-| **テストランナー** | `src/tests/framework/TestRunner.js` | `runAllTests()`, `runQuickTests()` |
-| **単体テスト** | `src/tests/unit/` | 個別実行は各ファイルの `run関数名Tests()` |
-| **統合テスト** | `src/tests/integration/` | 個別実行は各ファイルの `run関数名Tests()` |
-| **E2Eテスト** | `src/tests/e2e/` | 個別実行は各ファイルの `run関数名Tests()` |
-
-#### 単体テスト個別実行
-
-**📁 ファイル**: `src/tests/unit/ConfigManagerTest.js`
-```javascript
-runConfigManagerTests();  // ConfigManagerの単体テスト
-```
-
-**📁 ファイル**: `src/tests/unit/CompanyTest.js`
-```javascript
-runCompanyTests();        // Companyモデルの単体テスト
-```
-
-**📁 ファイル**: `src/tests/unit/TavilyClientTest.js`
-```javascript
-runTavilyClientTests();   // TavilyClientの単体テスト
-```
-
-#### 統合テスト個別実行
-
-**📁 ファイル**: `src/tests/integration/CompanyResearchIntegrationTest.js`
-```javascript
-runCompanyResearchIntegrationTests();  // 企業調査サービス統合テスト
-```
-
-#### E2Eテスト個別実行
-
-**📁 ファイル**: `src/tests/e2e/CompanyResearchWorkflowTest.js`
-```javascript
-runCompanyResearchWorkflowTests();     // 完全ワークフローテスト
-```
-
-**📁 ファイル**: `src/tests/e2e/PerformanceTest.js`
-```javascript
-runPerformanceTests();                 // パフォーマンステスト
-```
-
-### 期待される結果
-
-```
-🧪 全体テスト実行結果
-═══════════════════════════════════════════════
-📊 テスト完了サマリー:
-   総テスト数: 23件
-   成功: 23件 ✅
-   失敗: 0件
-   成功率: 100% 🏆
-   実行時間: 0.21秒 ⚡
-
-📋 カテゴリ別詳細:
-   単体テスト: 11/11成功 (21ms)
-   統合テスト: 4/4成功 (10ms)  
-   E2Eテスト: 8/8成功 (135ms)
-```
-
-### テストカバレッジ詳細
-
-| カテゴリ | 対象機能 | テスト数 | カバー内容 |
-|----------|----------|----------|------------|
-| **単体テスト** | ConfigManager, Company, TavilyClient | 11 | 設定管理、データモデル、API通信 |
-| **統合テスト** | 企業調査サービス連携 | 4 | サービス間連携、エラーハンドリング |
-| **E2Eテスト** | 完全ワークフロー、パフォーマンス | 8 | 実用シナリオ、性能検証 |
+**対象ファイル**:
+- `src/tests/unit/` 以下に配置されています。
 
 ---
 
-## 🚀 2. 本番環境テスト（実際のAPI使用）
+### 2. 統合テスト (Integration Tests)
 
-> **📁 本番テストコードの場所**: `src/tests/production/ProductionTests.js`  
-> **📖 詳細ドキュメント**: `src/tests/production/README.md`
+**目的**:
+複数のモジュールを組み合わせたときに、それらが正しく連携して動作するかを検証します。例えば、「企業調査サービスがAPIクライアントを呼び出し、結果を正しく処理できるか」といったシナリオを確認します。単体テスト同様、外部APIなどはモック化します。
 
-### 事前準備チェック
+**実行方法**:
+- **すべての統合テストを実行**: `TestRunner.js` -> `runIntegrationTests()`
 
-#### Step 1: 設定確認
-
-**📁 実行ファイル**: `src/tests/production/ProductionTests.js`
-
-```javascript
-// API設定の確認
-checkApiConfiguration();    // ProductionTests.js の関数
-```
-
-**📋 実行手順**:
-1. Google Apps Scriptエディタで `ProductionTests.js` を開く
-2. 関数選択で `checkApiConfiguration` を選択
-3. ▶️ 実行ボタンをクリック
-
-**📝 この関数の処理内容**:
-```javascript
-function checkApiConfiguration() {
-  console.log('=== API設定確認 ===');
-  
-  // 必須APIキー確認
-  var tavilyKey = ConfigManager.get('TAVILY_API_KEY');
-  console.log('Tavily APIキー:', tavilyKey ? '設定済み ✅' : '未設定 ❌');
-  
-  var openaiKey = ConfigManager.get('OPENAI_API_KEY');
-  console.log('OpenAI APIキー:', openaiKey ? '設定済み ✅' : '未設定 ❌');
-  
-  // その他設定確認
-  console.log('通知メール:', ConfigManager.get('NOTIFICATION_EMAIL') || '未設定');
-  console.log('バッチサイズ:', ConfigManager.getNumber('BATCH_SIZE', 20));
-  
-  // スプレッドシート確認
-  console.log('スプレッドシートID:', ConfigManager.get('SPREADSHEET_ID') ? '設定済み ✅' : '未設定 ❌');
-}
-```
-
-#### Step 2: スプレッドシート準備
-1. **企業リストシート**: 実際の企業名を入力
-2. **本社情報シート**: ヘッダー行が正しく設定されていることを確認
-3. **支店情報シート**: ヘッダー行が正しく設定されていることを確認
-
-### 段階的本番テスト実行
-
-#### Phase 1: API接続テスト
-
-**📁 実行ファイル**: `src/tests/production/ProductionTests.js`
-
-```javascript
-// 実際のAPIとの接続確認
-testRealApiConnections();    // ProductionTests.js の関数
-```
-
-**📋 実行手順**:
-1. Google Apps Scriptエディタで `ProductionTests.js` を開く
-2. 関数選択で `testRealApiConnections` を選択
-3. ▶️ 実行ボタンをクリック
-
-**📝 この関数の処理内容**:
-```javascript
-function testRealApiConnections() {
-  console.log('🔌 実際のAPI接続テスト開始');
-  
-  try {
-    // Tavily API接続テスト
-    console.log('--- Tavily API接続テスト ---');
-    var tavilyResult = TavilyClient.testConnection();
-    console.log('Tavily結果:', tavilyResult);
-    
-    // OpenAI API接続テスト  
-    console.log('--- OpenAI API接続テスト ---');
-    var openaiResult = OpenAIClient.testConnection();
-    console.log('OpenAI結果:', openaiResult);
-    
-    if (tavilyResult.success && openaiResult.success) {
-      console.log('✅ 全API接続成功');
-      return true;
-    } else {
-      console.log('❌ API接続に問題があります');
-      return false;
-    }
-    
-  } catch (error) {
-    console.error('❌ API接続エラー:', error.toString());
-    return false;
-  }
-}
-```
-
-#### Phase 2: 単一企業テスト
-
-**📁 実行ファイル**: `src/tests/production/ProductionTests.js`
-
-```javascript
-// 1社での実証テスト
-testSingleCompanyResearch();    // ProductionTests.js の関数
-```
-
-**📋 実行手順**:
-1. Google Apps Scriptエディタで `ProductionTests.js` を開く
-2. 関数選択で `testSingleCompanyResearch` を選択
-3. ▶️ 実行ボタンをクリック
-
-**📝 この関数の処理内容**:
-```javascript
-function testSingleCompanyResearch() {
-  console.log('🏢 単一企業調査テスト開始');
-  
-  try {
-    // 実在する大手企業でテスト
-    var companyName = 'トヨタ自動車株式会社';
-    
-    console.log('調査対象:', companyName);
-    console.log('調査開始...');
-    
-    var startTime = Date.now();
-    var result = CompanyResearchService.researchCompany(companyName);
-    var duration = Date.now() - startTime;
-    
-    if (result.success) {
-      console.log('✅ 調査成功！');
-      console.log('企業名:', result.company.companyName);
-      console.log('本社所在地:', result.company.prefecture + result.company.city);
-      console.log('信頼性スコア:', result.company.reliabilityScore + '%');
-      console.log('処理時間:', duration + 'ms');
-      console.log('取得フィールド数:', Object.keys(result.company).length);
-      return true;
-    } else {
-      console.log('❌ 調査失敗:', result.error);
-      return false;
-    }
-    
-  } catch (error) {
-    console.error('❌ エラー発生:', error.toString());
-    return false;
-  }
-}
-```
-
-#### Phase 3: 小規模バッチテスト
-
-**📁 実行ファイル**: `src/tests/production/ProductionTests.js`
-
-```javascript
-// 3-5社での小規模バッチ処理テスト
-testSmallBatchProcessing();    // ProductionTests.js の関数
-```
-
-**📋 実行手順**:
-1. Google Apps Scriptエディタで `ProductionTests.js` を開く
-2. 関数選択で `testSmallBatchProcessing` を選択
-3. ▶️ 実行ボタンをクリック
-
-**📝 この関数の処理内容**:
-```javascript
-function testSmallBatchProcessing() {
-  console.log('📦 小規模バッチ処理テスト開始');
-  
-  try {
-    // テスト用企業リスト（実在企業）
-    var testCompanies = [
-      'ソニーグループ株式会社',
-      '株式会社ファーストリテイリング', 
-      '任天堂株式会社'
-    ];
-    
-    console.log('バッチ処理対象:', testCompanies.length + '社');
-    
-    var startTime = Date.now();
-    var results = BatchProcessor.processSpecificCompanies(testCompanies);
-    var duration = Date.now() - startTime;
-    
-    var successCount = results.filter(r => r.success).length;
-    var failCount = results.filter(r => !r.success).length;
-    
-    console.log('✅ バッチ処理完了');
-    console.log('成功:', successCount + '社');
-    console.log('失敗:', failCount + '社');
-    console.log('処理時間:', duration + 'ms');
-    console.log('平均処理時間:', Math.round(duration / testCompanies.length) + 'ms/社');
-    
-    return successCount > 0;
-    
-  } catch (error) {
-    console.error('❌ バッチ処理エラー:', error.toString());
-    return false;
-  }
-}
-```
-
-#### Phase 4: 実際のスプレッドシート処理テスト
-
-**📁 実行ファイル**: `src/tests/production/ProductionTests.js`
-
-```javascript
-// スプレッドシートから実際の企業リストを読み込んでテスト
-testRealSpreadsheetProcessing();    // ProductionTests.js の関数
-```
-
-**📋 実行手順**:
-1. Google Apps Scriptエディタで `ProductionTests.js` を開く
-2. 関数選択で `testRealSpreadsheetProcessing` を選択
-3. ▶️ 実行ボタンをクリック
-
-**📝 この関数の処理内容**:
-```javascript
-function testRealSpreadsheetProcessing() {
-  console.log('📊 実際のスプレッドシート処理テスト');
-  
-  try {
-    // 実際のスプレッドシートから企業リスト取得
-    var companies = SpreadsheetService.getCompanyList('未処理');
-    console.log('処理対象企業数:', companies.length);
-    
-    if (companies.length === 0) {
-      console.log('⚠️ 処理対象企業がありません');
-      console.log('企業リストシートに企業名を入力してください');
-      return false;
-    }
-    
-    // 安全のため最初の2社だけ処理
-    var testCount = Math.min(2, companies.length);
-    console.log('テスト処理対象:', testCount + '社');
-    
-    // バッチサイズを一時的に小さく設定
-    var originalBatchSize = ConfigManager.getNumber('BATCH_SIZE', 20);
-    ConfigManager.set('BATCH_SIZE', testCount.toString());
-    
-    try {
-      // 実際のバッチ処理実行
-      BatchProcessor.startBatchProcessing();
-      console.log('✅ スプレッドシート処理テスト完了');
-      return true;
-    } finally {
-      // バッチサイズを元に戻す
-      ConfigManager.set('BATCH_SIZE', originalBatchSize.toString());
-    }
-    
-  } catch (error) {
-    console.error('❌ スプレッドシート処理エラー:', error.toString());
-    return false;
-  }
-}
-```
-
-### 包括的本番テスト実行
-
-**📁 実行ファイル**: `src/tests/production/ProductionTests.js`
-
-```javascript
-// 本番環境テストの推奨実行順序（全自動）
-runProductionTests();    // ProductionTests.js の関数
-```
-
-**📋 実行手順**:
-1. Google Apps Scriptエディタで `ProductionTests.js` を開く
-2. 関数選択で `runProductionTests` を選択
-3. ▶️ 実行ボタンをクリック
-4. **この1つの関数で全ての本番テストが順序通り実行されます**
-
-**📝 この関数の処理内容**:
-```javascript
-function runProductionTests() {
-  console.log('🚀 本番環境テスト実行開始');
-  console.log('================================');
-  
-  var results = {
-    configuration: false,
-    apiConnection: false,
-    singleCompany: false,
-    smallBatch: false,
-    spreadsheetTest: false
-  };
-  
-  // Step 1: 設定確認
-  console.log('\n📋 Step 1: 設定確認');
-  checkApiConfiguration();
-  results.configuration = true;
-  
-  // Step 2: API接続テスト
-  console.log('\n🔌 Step 2: API接続テスト');
-  results.apiConnection = testRealApiConnections();
-  if (!results.apiConnection) {
-    console.log('❌ API接続に失敗しました。設定を確認してください。');
-    return results;
-  }
-  
-  // Step 3: 単一企業テスト
-  console.log('\n🏢 Step 3: 単一企業テスト');
-  results.singleCompany = testSingleCompanyResearch();
-  if (!results.singleCompany) {
-    console.log('❌ 単一企業テストに失敗しました。');
-    return results;
-  }
-  
-  // Step 4: 小規模バッチテスト
-  console.log('\n📦 Step 4: 小規模バッチテスト');
-  results.smallBatch = testSmallBatchProcessing();
-  if (!results.smallBatch) {
-    console.log('❌ バッチ処理テストに失敗しました。');
-    return results;
-  }
-  
-  // Step 5: スプレッドシートテスト
-  console.log('\n📊 Step 5: スプレッドシート処理テスト');
-  results.spreadsheetTest = testRealSpreadsheetProcessing();
-  
-  // 結果サマリー
-  console.log('\n🎯 本番環境テスト結果');
-  console.log('================================');
-  console.log('設定確認:', results.configuration ? '✅' : '❌');
-  console.log('API接続:', results.apiConnection ? '✅' : '❌');
-  console.log('単一企業調査:', results.singleCompany ? '✅' : '❌');
-  console.log('バッチ処理:', results.smallBatch ? '✅' : '❌');
-  console.log('スプレッドシート処理:', results.spreadsheetTest ? '✅' : '❌');
-  
-  var allSuccess = Object.values(results).every(r => r === true);
-  
-  if (allSuccess) {
-    console.log('\n🎉 全ての本番環境テストが成功しました！');
-    console.log('本格的な運用を開始できます。');
-  } else {
-    console.log('\n⚠️ 一部のテストで問題が発生しました。');
-    console.log('問題を解決してから運用を開始してください。');
-  }
-  
-  return results;
-}
-```
+**対象ファイル**:
+- `src/tests/integration/` 以下に配置されています。
 
 ---
 
-## ⚠️ テスト実行時の注意事項
+### 3. E2Eテスト (End-to-End Tests)
 
-### API使用量管理
-- **Tavily API**: 1日の検索回数制限に注意
-- **OpenAI API**: トークン使用量とコスト管理
-- 本番テストは少数の企業から開始
+**目的**:
+ユーザーの操作を模倣し、アプリケーション全体のワークフローが最初から最後まで正常に完了するかを検証します。「企業リストを読み込み、情報を収集し、スプレッドシートに書き込む」といった一連の流れをテストします。このテストもモック環境で実行し、システム全体のロジックに不整合がないかを確認します。
 
-### エラー対応
-- ネットワークエラー時の再試行機能
-- API制限に達した時の適切な処理
-- 不正なデータ入力時のエラーハンドリング
+**実行方法**:
+- **すべてのE2Eテストを実行**: `TestRunner.js` -> `runE2ETests()`
 
-### データ管理
-- スプレッドシートへの正しいデータ保存
-- 重複データの適切な処理
-- 重要データのバックアップ
+**対象ファイル**:
+- `src/tests/e2e/` 以下に配置されています。
 
 ---
 
-## 🎯 推奨テスト実行フロー
+### 🚀 4. 本番テスト (Production Tests)
 
-### 開発・デバッグ時
+**🚨 注意: このテストは実際のAPIを呼び出し、実際のデータを扱います。APIの利用料金や、データの上書きに十分注意してください。**
 
-**📁 実行ファイル**: `src/tests/framework/TestRunner.js`
+**目的**:
+モック環境では確認できない、実際の外部APIとの接続や、本番環境特有の問題を検出するための最終テストです。リリース前の最終的な品質保証として実施します。
 
+**実行方法**:
+`src/tests/production/ProductionTests.js` ファイル内の関数を実行します。
+
+**推奨される実行手順**:
+
+1.  **設定確認 (`checkApiConfiguration`)**:
+    APIキーやスプレッドシートIDが正しく設定されているかを確認します。
+
+2.  **API接続テスト (`testRealApiConnections`)**:
+    TavilyとOpenAIのAPIに実際に接続できるかを確認します。
+
+3.  **単一企業テスト (`testSingleCompanyResearch`)**:
+    1社分の調査を実際に実行し、データが取得できるかを確認します。
+
+4.  **小規模バッチテスト (`testSmallBatchProcessing`)**:
+    3〜5社程度の小さなバッチ処理が正常に動作するかを確認します。
+
+5.  **包括テスト (`runProductionTests`)**:
+    上記を含むすべての本番テストを順次実行します。リリース前の最終確認に最適です。
+
+**実行結果の例**:
 ```
-1. runAllTests() で基本機能確認           // TestRunner.js
-2. 問題があれば runComponentTests('コンポーネント名') で詳細確認  // TestRunner.js
-3. コード修正後に再度 runAllTests()      // TestRunner.js
+🚀 本番環境テスト実行開始
+================================
+...
+🎉 全ての本番環境テストが成功しました！
 ```
 
-**📋 実行手順**:
-1. Google Apps Scriptエディタで `TestRunner.js` を開く
-2. 関数選択で実行したい関数を選択
-3. ▶️ 実行ボタンをクリック
+**トラブルシューティング**:
+- **API接続エラー**: APIキーやネットワーク接続を確認してください。
+- **タイムアウト**: バッチサイズを小さくして試してください。
 
-### 本番環境導入時
+---
 
-**📁 実行ファイル**: `src/tests/production/ProductionTests.js`
+### 🧪 テストの全体実行と推奨フロー
 
-```
-1. checkApiConfiguration() で設定確認    // ProductionTests.js
-2. runProductionTests() で包括的テスト   // ProductionTests.js
-3. 全て成功したら本格運用開始
-```
+**全体実行**:
+`TestRunner.js` の `runAllTests()` を実行すると、単体・統合・E2Eテストがすべて実行されます。開発中はこれを基本とします。
 
-**📋 実行手順**:
-1. Google Apps Scriptエディタで `ProductionTests.js` を開く
-2. 関数選択で実行したい関数を選択
-3. ▶️ 実行ボタンをクリック
+**推奨テストフロー**:
 
-### 定期メンテナンス時
+1.  **機能開発時**:
+    - `runUnitTests()` や `runComponentTests()` で、修正箇所の単体テストを頻繁に実行します。
+    - 機能の区切りで `runAllTests()` を実行し、既存機能への影響（デグレード）がないか確認します。
 
-**📁 実行ファイル**: `TestRunner.js` と `ProductionTests.js`
+2.  **リリース前**:
+    - `runAllTests()` でモック環境でのテストがすべて成功することを確認します。
+    - `runProductionTests()` を実行し、本番環境での動作を最終確認します。
 
-```
-1. runAllTests() で基本機能確認          // TestRunner.js
-2. testRealApiConnections() でAPI状態確認 // ProductionTests.js
-3. 必要に応じて設定調整
-```
+---
+### 🛠️ テストサポートツール
+
+- **GasT Framework**: BDDスタイルの構文（`describe`, `it`, `expect`）でテストを記述できる、GAS専用の軽量テストフレームワークです。
+- **MockFactory / TestDataFactory**: テスト用のモックオブジェクトやテストデータを簡単に生成するためのユーティリティです。これにより、テストの準備が簡素化されます。
 
 ## セットアップ手順
 
