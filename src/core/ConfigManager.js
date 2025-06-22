@@ -24,6 +24,10 @@ var ConfigManager = (function() {
     // API設定
     'TAVILY_API_KEY': '',
     'OPENAI_API_KEY': '',
+    'OPENAI_MODEL': 'gpt-4o-mini',
+    'OPENAI_MAX_TOKENS': '4000',
+    'OPENAI_TEMPERATURE': '0.1',
+    'OPENAI_TIMEOUT_MS': '60000',
     
     // バッチ処理設定
     'BATCH_SIZE': '8', // Google Apps Script 6分制限に対応（1社40秒×8社=320秒）

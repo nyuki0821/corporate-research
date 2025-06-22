@@ -46,9 +46,9 @@ var OpenAIClient = (function() {
    */
   function buildChatRequest(messages, options) {
     var defaults = {
-      model: 'gpt-4o-mini',
-      max_tokens: 4000,
-      temperature: 0.1,
+      model: ConfigManager.get('OPENAI_MODEL', 'gpt-4o-mini'),
+      max_tokens: ConfigManager.getNumber('OPENAI_MAX_TOKENS', 4000),
+      temperature: ConfigManager.getNumber('OPENAI_TEMPERATURE', 0.1),
       top_p: 1,
       frequency_penalty: 0,
       presence_penalty: 0
@@ -291,7 +291,7 @@ var OpenAIClient = (function() {
       userPrompt += '\n検索結果:\n' + context;
 
       var requestBody = {
-        model: 'gpt-4o',
+        model: ConfigManager.get('OPENAI_MODEL', 'gpt-4o-mini'),
         messages: [
           {
             role: 'system',
@@ -303,7 +303,7 @@ var OpenAIClient = (function() {
           }
         ],
         max_tokens: responseTokens,
-        temperature: 0.1,
+        temperature: ConfigManager.getNumber('OPENAI_TEMPERATURE', 0.1),
         response_format: { type: 'json_object' }
       };
 
@@ -402,9 +402,7 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
         ];
 
         var requestData = buildChatRequest(messages, {
-          model: 'gpt-4o-mini',
-          max_tokens: 2000,
-          temperature: 0.1
+          max_tokens: 2000
         });
 
         var requestOptions = {
@@ -482,7 +480,6 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
         ];
 
         var requestData = buildChatRequest(messages, {
-          model: 'gpt-4o-mini',
           max_tokens: 500,
           temperature: 0.3
         });
@@ -547,7 +544,7 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
                       '上記から営業活動に役立つ示唆をサマリーしてください。';
 
       var requestBody = {
-        model: 'gpt-4o-mini',
+        model: ConfigManager.get('OPENAI_MODEL', 'gpt-4o-mini'),
         messages: [
           {
             role: 'system',
@@ -559,7 +556,7 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
           }
         ],
         max_tokens: 300,
-        temperature: 0.2
+        temperature: ConfigManager.getNumber('OPENAI_TEMPERATURE', 0.2)
       };
 
       var response = ApiBase.post(_baseUrl + '/chat/completions', requestBody, {
@@ -638,7 +635,7 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
                       '上記から営業活動に役立つ示唆をサマリーしてください。';
 
       var requestBody = {
-        model: 'gpt-4o-mini',
+        model: ConfigManager.get('OPENAI_MODEL', 'gpt-4o-mini'),
         messages: [
           {
             role: 'system',
@@ -650,7 +647,7 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
           }
         ],
         max_tokens: 300,
-        temperature: 0.2
+        temperature: ConfigManager.getNumber('OPENAI_TEMPERATURE', 0.2)
       };
 
       var response = ApiBase.post(_baseUrl + '/chat/completions', requestBody, {
@@ -712,7 +709,6 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
       ];
 
       var requestData = buildChatRequest(messages, {
-        model: 'gpt-4o-mini',
         max_tokens: 50,
         temperature: 0
       });
