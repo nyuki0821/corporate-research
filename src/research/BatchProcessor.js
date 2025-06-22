@@ -173,7 +173,7 @@ var BatchProcessor = (function() {
                     recruitmentStatus: companyData.recruitmentStatus,
                     website: companyData.website,
                     reliabilityScore: companyData.reliabilityScore,
-                    branches: companyData.branches || [],
+
                     processedAt: new Date().toISOString(),
                     processingResult: 'SUCCESS'
                   });
@@ -184,25 +184,7 @@ var BatchProcessor = (function() {
                   }
                   Logger.logInfo('本社情報保存完了: ' + company.name);
                   
-                  // 支店情報を保存（存在する場合）
-                  if (companyData.branches && companyData.branches.length > 0) {
-                    Logger.logInfo('支店情報を保存中: ' + company.name + ' (' + companyData.branches.length + '件)');
-                    
-                    // 支店情報の詳細をログ出力
-                    companyData.branches.forEach(function(branch, index) {
-                      Logger.logDebug('支店' + (index + 1) + ': ' + 
-                        (branch.name || '名称不明') + ' (' + (branch.type || 'タイプ不明') + ') - ' +
-                        (branch.prefecture || '') + (branch.city || '') + ' ' +
-                        (branch.phone || '電話番号なし'));
-                    });
-                    
-                    if (!SpreadsheetService.saveBranchesInfo(company.id, companyData.branches)) {
-                      throw new Error('Failed to save branches info');
-                    }
-                    Logger.logInfo('支店情報保存完了: ' + company.name + ' (' + companyData.branches.length + '件)');
-                  } else {
-                    Logger.logInfo('支店情報なし: ' + company.name + ' (抽出されませんでした)');
-                  }
+
                   
                 } catch (saveErr) {
                   saveSuccess = false;

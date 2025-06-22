@@ -2,7 +2,7 @@
  * @fileoverview Company Research Workflow E2E Tests
  * @author Corporate Research Team
  * 
- * 企業リスト読み込みから支店情報保存までの完全なワークフローをテスト
+ * 企業リスト読み込みから企業情報保存までの完全なワークフローをテスト
  */
 
 // GasTフレームワークが利用可能かチェック（静かに）

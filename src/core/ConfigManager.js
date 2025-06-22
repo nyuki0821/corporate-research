@@ -32,7 +32,7 @@ var ConfigManager = (function() {
     'PROCESSING_DELAY_MS': '2000',
     
     // 通知設定
-    'NOTIFICATION_EMAIL': Session.getActiveUser().getEmail(),
+    'NOTIFICATION_EMAIL': '',
     'ENABLE_NOTIFICATIONS': 'true',
     'NOTIFY_BATCH_COMPLETE': 'true',
     'NOTIFY_BATCH_ERROR': 'true',
@@ -52,12 +52,20 @@ var ConfigManager = (function() {
     'EXTRACTION_TIMEOUT_MS': '60000',
     'ENABLE_DETAILED_SEARCH': 'true',
     'INCLUDE_FINANCIALS': 'false',
-    'INCLUDE_BRANCHES': 'true',
+
     
     // データ品質設定
     'MIN_RELIABILITY_SCORE': '60',
     'ENABLE_MULTIPLE_COMPANY_DETECTION': 'true',
-    'ENABLE_AUTO_NORMALIZATION': 'true'
+    'ENABLE_AUTO_NORMALIZATION': 'true',
+    'ENABLE_AUTO_PROCESSING': 'false',
+    'AUTO_PROCESSING_INTERVAL': '60',
+    'ENABLE_DETAILED_LOGGING': 'true',
+    'ENABLE_FINANCIAL_DATA': 'false',
+    'ENABLE_NEWS_SUMMARY': 'true',
+    'ENABLE_RECRUITMENT_SUMMARY': 'true',
+    'ENABLE_COMPANY_PHILOSOPHY': 'true',
+    'CONTEXT_LENGTH_LIMIT': '80000'
   };
 
   // Private functions

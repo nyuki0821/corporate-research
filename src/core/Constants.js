@@ -9,9 +9,12 @@ var Constants = (function() {
     // API endpoints
     ENDPOINTS: {
       COMPANY_SEARCH: 'https://api.example.com/v1/company/search',
-      COMPANY_DETAILS: 'https://api.example.com/v1/company/details',
-      BRANCH_SEARCH: 'https://api.example.com/v1/branch/search',
-      FINANCIAL_DATA: 'https://api.example.com/v1/financial/data'
+      COMPANY_DETAIL: 'https://api.example.com/v1/company/detail',
+      NEWS_SEARCH: 'https://api.example.com/v1/news/search',
+      
+      // External service endpoints
+      GOOGLE_PLACES: 'https://maps.googleapis.com/maps/api/place',
+      YAHOO_FINANCE: 'https://finance.yahoo.com/quote'
     },
     
     // API request configuration
@@ -37,7 +40,6 @@ var Constants = (function() {
       COMPANY_LIST: '企業リスト',
       HEADQUARTERS: '本社情報',
       COMPANIES: 'Companies',
-      BRANCHES: '支店情報',
       FINANCIAL: 'Financial Data',
       LOGS: 'Logs',
       SETTINGS: 'Settings',
@@ -90,19 +92,7 @@ var Constants = (function() {
       ERROR_MESSAGE: 13
     },
     
-    // Column mappings for Branches sheet
-    BRANCH_COLUMNS: {
-      COMPANY_NAME: 1,
-      COMPANY_ID: 2,
-      BRANCH_NAME: 3,
-      BRANCH_ID: 4,
-      ADDRESS: 5,
-      PHONE: 6,
-      TYPE: 7,
-      EMPLOYEES: 8,
-      STATUS: 9,
-      LAST_UPDATED: 10
-    },
+
     
     // Column mappings for Financial sheet
     FINANCIAL_COLUMNS: {
@@ -140,7 +130,6 @@ var Constants = (function() {
     // Cache key prefixes
     KEYS: {
       COMPANY: 'company_',
-      BRANCH: 'branch_',
       FINANCIAL: 'financial_',
       API_TOKEN: 'api_token_',
       SETTINGS: 'settings_'

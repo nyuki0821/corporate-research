@@ -113,24 +113,7 @@ var Main = (function() {
     return address;
   }
 
-  /**
-   * Calculate branch importance
-   * @private
-   */
-  function calculateBranchImportance(type) {
-    var importanceMap = {
-      '本社': 5,
-      '支社': 4,
-      '支店': 3,
-      '営業所': 3,
-      '工場': 4,
-      '事業所': 3,
-      'オフィス': 2,
-      '出張所': 2,
-      'その他': 1
-    };
-    return importanceMap[type] || 1;
-  }
+  
 
   // Public functions
   /**
@@ -862,7 +845,7 @@ var Main = (function() {
     diagnoseSystem: diagnoseSystem,
     checkCompanyListStatus: checkCompanyListStatus,
     parseAddressString: parseAddressString,
-    calculateBranchImportance: calculateBranchImportance,
+
     showProcessStatusDialog: showProcessStatusDialog,
     createMenuBySpreadsheetId: createMenuBySpreadsheetId,
     setupSpreadsheetBinding: setupSpreadsheetBinding,

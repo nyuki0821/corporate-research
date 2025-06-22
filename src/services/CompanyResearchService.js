@@ -7,6 +7,8 @@ function CompanyResearchService() {
    * @returns {Object} 研究結果
    */
   function researchCompany(companyName, phoneNumber) {
+    var startTime = Date.now(); // 処理開始時間を記録
+    
     try {
       Logger.logInfo('Starting company research for: ' + companyName, {
         phoneNumber: phoneNumber
@@ -38,12 +40,14 @@ function CompanyResearchService() {
       // 7. 結果の検証と最終処理
       var finalResult = finalizeBatchResult(enhancedData, searchResults);
       
-      Logger.logInfo('Company research completed successfully for: ' + companyName, {
+      // 処理結果のサマリー
+      Logger.logInfo('企業情報抽出完了', {
+        companyName: finalResult.companyName,
+        sourceCount: searchResults.length,
         reliabilityScore: finalResult.reliabilityScore,
-        fieldsExtracted: Object.keys(finalResult).filter(function(key) {
-          return finalResult[key] !== null && finalResult[key] !== '' && finalResult[key] !== undefined;
-        }).length,
-        branchCount: finalResult.branches ? finalResult.branches.length : 0
+        newsCount: finalResult.latestNews ? 1 : 0,
+        recruitmentCount: finalResult.recruitmentStatus ? 1 : 0,
+        processingTimeMs: Date.now() - startTime
       });
 
       return {
@@ -332,10 +336,7 @@ function CompanyResearchService() {
         enhanced.reliabilityScore = 20;
       }
 
-      // branchesが未定義の場合は空配列を設定
-      if (!enhanced.branches) {
-        enhanced.branches = [];
-      }
+
 
       return enhanced;
 
@@ -471,10 +472,7 @@ function CompanyResearchService() {
         result.establishedYear = isNaN(year) ? null : year;
       }
 
-      // branches配列の確認
-      if (!Array.isArray(result.branches)) {
-        result.branches = [];
-      }
+
 
       return result;
 

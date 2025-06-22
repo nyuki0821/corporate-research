@@ -150,22 +150,7 @@ var ProductionTests = (function() {
           console.log('❌ 未取得フィールド:', validation.headquarters.missingFields.join(', '));
         }
         
-        if (result.branches && result.branches.length > 0) {
-          console.log('支店情報:', result.branches.length + '件取得');
-          
-          // 支店情報の詳細を表示
-          result.branches.forEach(function(branch, index) {
-            console.log('  支店' + (index + 1) + ':', branch.name, '(' + branch.type + ')');
-            if (branch.prefecture && branch.city) {
-              console.log('    所在地:', branch.prefecture + branch.city);
-            }
-            if (branch.phone) {
-              console.log('    電話番号:', branch.phone);
-            }
-          });
-        } else {
-          console.log('支店情報: 取得なし');
-        }
+
 
         // ニュースサマリーの表示
         if (result.newsSummary) {
@@ -217,8 +202,8 @@ var ProductionTests = (function() {
           }
         }
         
-        // 詳細レポートを表示（支店情報とニュースサマリーも含める）
-        displayDetailedValidationReport(validation, result.branches, result.newsSummary, result.recruitmentSummary);
+        // 詳細レポートを表示
+        displayDetailedValidationReport(validation, null, result.newsSummary, result.recruitmentSummary);
         
         return {
           success: true,
@@ -304,21 +289,7 @@ var ProductionTests = (function() {
             console.log('❌ 未取得フィールド:', validation.headquarters.missingFields.join(', '));
           }
           
-          // 支店情報
-          if (result.branches && result.branches.length > 0) {
-            console.log('支店情報:', result.branches.length + '件取得');
-            result.branches.forEach(function(branch, branchIndex) {
-              console.log('  支店' + (branchIndex + 1) + ':', branch.name + ' (' + branch.type + ')');
-              if (branch.prefecture && branch.city) {
-                console.log('    所在地:', branch.prefecture + branch.city);
-              }
-              if (branch.phone) {
-                console.log('    電話番号:', branch.phone);
-              }
-            });
-          } else {
-            console.log('支店情報: 取得されませんでした');
-          }
+
           
           // ニュースサマリー
           if (result.newsSummary) {
@@ -457,12 +428,7 @@ var ProductionTests = (function() {
                   throw new Error('Failed to save headquarters info');
                 }
                 
-                // 支店情報を保存（存在する場合）
-                if (result.branches && result.branches.length > 0) {
-                  if (!SpreadsheetService.saveBranchesInfo(result.company.id, result.branches)) {
-                    throw new Error('Failed to save branches info');
-                  }
-                }
+                
                 
                 // ニュースサマリーを保存（存在する場合）
                 if (result.newsSummary) {
@@ -492,7 +458,7 @@ var ProductionTests = (function() {
                 rowIndex: company.rowIndex,
                   companyName: company.name,
                   company: result.company,
-                  branches: result.branches,
+        
                   newsSummary: result.newsSummary,
                   recruitmentSummary: result.recruitmentSummary,
                   saveError: saveSuccess ? null : saveError.message
@@ -770,28 +736,7 @@ var ProductionTests = (function() {
       );
     }
 
-    // 支店情報の検証（もし存在する場合）
-    if (company.branches && Array.isArray(company.branches) && company.branches.length > 0) {
-      validation.branches.available = true;
-      validation.branches.count = company.branches.length;
-      
-      var branchFields = ['name', 'type', 'phone', 'address', 'prefecture', 'city'];
-      var totalBranchFields = branchFields.length * company.branches.length;
-      var completedBranchFields = 0;
 
-      company.branches.forEach(function(branch, index) {
-        branchFields.forEach(function(field) {
-          var value = branch[field];
-          if (value !== null && value !== undefined && value !== '') {
-            completedBranchFields++;
-          }
-        });
-      });
-
-      validation.branches.completionRate = Math.round(
-        (completedBranchFields / totalBranchFields) * 100
-      );
-    }
 
     return validation;
   }
@@ -836,29 +781,7 @@ var ProductionTests = (function() {
         });
     }
 
-    // 支店情報
-    console.log('\n【支店情報シート】');
-    if (branches && branches.length > 0) {
-      console.log('支店数:', branches.length);
-      console.log('支店情報: 取得成功');
-      
-      branches.forEach(function(branch, index) {
-        console.log('\n支店' + (index + 1) + '詳細:');
-        console.log('  • 支店名:', branch.name);
-        console.log('  • 種別:', branch.type);
-        if (branch.phone) console.log('  • 電話番号:', branch.phone);
-        if (branch.postalCode) console.log('  • 郵便番号:', branch.postalCode);
-        if (branch.prefecture && branch.city) {
-          console.log('  • 所在地:', branch.prefecture + branch.city);
-        }
-        if (branch.addressDetail) console.log('  • 住所詳細:', branch.addressDetail);
-        if (branch.businessHours) console.log('  • 営業時間:', branch.businessHours);
-        if (branch.employees) console.log('  • 従業員数:', branch.employees);
-        if (branch.notes) console.log('  • 備考:', branch.notes);
-      });
-    } else {
-      console.log('支店情報: 取得されませんでした');
-    }
+
 
     // ニュースサマリー情報
     console.log('\n【最新ニュースサマリー】');
@@ -946,7 +869,7 @@ var ProductionTests = (function() {
           success: result.success,
           companyName: companyName,
           company: result.success ? result.company : null,
-          branches: result.success ? result.branches : null,
+
           newsSummary: result.success ? result.newsSummary : null,
           recruitmentSummary: result.success ? result.recruitmentSummary : null,
           error: result.success ? null : result.error
@@ -1000,99 +923,38 @@ var ProductionTests = (function() {
         
         var company = result.data;
         
-        // 基本情報表示
-        console.log('\n=== 基本情報 ===');
+        // 結果の詳細を表示
+        console.log('\n=== 企業情報抽出結果 ===');
         console.log('企業名:', company.companyName);
-        console.log('正式名称:', company.officialName);
-        console.log('電話番号:', company.phone);
+        console.log('正式名称:', company.officialName || '未取得');
+        console.log('業種:', company.industryLarge || '未取得');
+        console.log('従業員数:', company.employees || '未取得');
+        console.log('所在地:', company.prefecture, company.city || '未取得');
+        console.log('電話番号:', company.phone || '未取得');
+        console.log('設立年:', company.establishedYear || '未取得');
+        console.log('資本金:', company.capital || '未取得');
+        console.log('代表者:', company.representativeName || '未取得');
+        console.log('企業理念:', company.philosophy || '未取得');
+        console.log('最新ニュース:', company.latestNews || '未取得');
+        console.log('採用状況:', company.recruitmentStatus || '未取得');
         console.log('信頼性スコア:', company.reliabilityScore);
         
-        // ソースURL情報表示
-        console.log('\n=== ソースURL情報 ===');
-        console.log('公式サイトURL:', company.officialSiteUrl || '検出されませんでした');
-        console.log('主要ソースURL:', company.primarySourceUrl || '設定されませんでした');
-        console.log('全ソースURL数:', company.sourceUrls ? company.sourceUrls.length : 0);
-        
-        if (company.sourceUrls && company.sourceUrls.length > 0) {
-          console.log('ソースURL一覧:');
-          company.sourceUrls.slice(0, 5).forEach(function(url, index) {
-            var isOfficial = url === company.officialSiteUrl ? ' [公式]' : '';
-            console.log('  ' + (index + 1) + '. ' + url + isOfficial);
-          });
+        if (company.newsSummary) {
+          console.log('\n--- ニュースサマリー ---');
+          console.log(company.newsSummary.summary);
+          if (company.newsSummary.keyPoints && company.newsSummary.keyPoints.length > 0) {
+            console.log('重要ポイント:', company.newsSummary.keyPoints.join(', '));
+          }
         }
         
-        // 最新ニュースサマリー表示
-        console.log('\n=== 最新ニュースサマリー ===');
-        if (company.latestNews) {
-          console.log(company.latestNews);
-          
-          // 参照URLが含まれているかチェック
-          if (company.latestNews.includes('【参照URL】')) {
-            console.log('✅ 参照URL情報が含まれています');
-          } else {
-            console.log('❌ 参照URL情報が含まれていません');
+        if (company.recruitmentSummary) {
+          console.log('\n--- 採用情報サマリー ---');
+          console.log(company.recruitmentSummary.summary);
+          if (company.recruitmentSummary.companyGrowth) {
+            console.log('成長性:', company.recruitmentSummary.companyGrowth);
           }
-          
-          // 公式サイトが優先されているかチェック
-          if (company.latestNews.includes('[公式]')) {
-            console.log('✅ 公式サイトが優先表示されています');
-          } else {
-            console.log('⚠️ 公式サイトの優先表示がありません');
-          }
-        } else {
-          console.log('最新ニュース情報は取得されませんでした');
-        }
-        
-        // 採用情報サマリー表示
-        console.log('\n=== 採用情報サマリー ===');
-        if (company.recruitmentStatus) {
-          console.log(company.recruitmentStatus);
-          
-          // 参照URLが含まれているかチェック
-          if (company.recruitmentStatus.includes('【参照URL】')) {
-            console.log('✅ 参照URL情報が含まれています');
-          } else {
-            console.log('❌ 参照URL情報が含まれていません');
-          }
-          
-          // 公式採用ページが適切に判定されているかチェック
-          if (company.recruitmentStatus.includes('[公式]')) {
-            console.log('✅ 公式採用ページが適切に判定されています');
-          } else {
-            console.log('⚠️ 公式採用ページの判定がありません（企業ドメインの採用ページがない可能性）');
-          }
-        } else {
-          console.log('採用情報は取得されませんでした');
-        }
-        
-        // スプレッドシート行データの確認
-        console.log('\n=== スプレッドシート出力確認 ===');
-        var companyObj = new Company(company);
-        var rowData = companyObj.toHeadquartersSpreadsheetRow();
-        
-        console.log('基本情報ソースURL（25列目）:', rowData[24] || '空欄');
-        console.log('最新ニュース（18列目）:', (rowData[17] || '').substring(0, 150) + '...');
-        console.log('採用状況（19列目）:', (rowData[18] || '').substring(0, 150) + '...');
-        
-        // 分離確認
-        var basicInfoUrls = rowData[24] || '';
-        var newsUrls = (rowData[17] || '').includes('【参照URL】');
-        var recruitmentUrls = (rowData[18] || '').includes('【参照URL】');
-        
-        console.log('\n=== ソースURL分離確認 ===');
-        console.log('✅ 25列目（基本情報）:', basicInfoUrls ? '設定済み' : '未設定');
-        console.log('✅ 18列目（ニュース）:', newsUrls ? 'ソースURL含む' : 'ソースURL未含');
-        console.log('✅ 19列目（採用）:', recruitmentUrls ? 'ソースURL含む' : 'ソースURL未含');
-        
-        // 基本情報のソースURL詳細表示
-        if (basicInfoUrls) {
-          console.log('\n基本情報で使用したソースURL:');
-          console.log(basicInfoUrls);
-          
-          if (basicInfoUrls.includes('[公式]')) {
-            console.log('✅ 公式サイトが基本情報ソースに含まれています');
-          } else {
-            console.log('⚠️ 公式サイトが基本情報ソースに含まれていません');
+          if (company.recruitmentSummary.businessOpportunity) {
+            console.log('営業機会:', company.recruitmentSummary.businessOpportunity);
           }
         }
         

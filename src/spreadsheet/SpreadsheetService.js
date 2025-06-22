@@ -122,22 +122,7 @@ var SpreadsheetService = (function() {
     ];
   }
 
-  function getBranchesHeaders() {
-    return [
-      '企業ID',
-      '支店名',
-      '支店電話番号',
-      '支店郵便番号',
-      '支店都道府県',
-      '支店市区町村',
-      '支店住所詳細',
-      '支店種別',
-      '重要度ランク',
-      '従業員数',
-      '営業時間',
-      '備考'
-    ];
-  }
+
 
   function getSettingsHeaders() {
     return [
@@ -209,39 +194,7 @@ var SpreadsheetService = (function() {
     return 0;
   }
 
-  /**
-   * Delete existing branches
-   * @private
-   */
-  function deleteExistingBranches(sheet, companyId) {
-    var data = sheet.getDataRange().getValues();
-    for (var i = data.length - 1; i > 0; i--) {
-      // 企業IDは0列目（A列）に保存されている
-      if (data[i][0] === companyId) {
-        sheet.deleteRow(i + 1);
-        Logger.logDebug('既存支店データを削除: 行' + (i + 1) + ', 企業ID: ' + companyId);
-      }
-    }
-  }
 
-  /**
-   * Calculate branch importance rank
-   * @private
-   */
-  function calculateBranchImportance(type) {
-    var importanceMap = {
-      '本社': 5,
-      '支社': 4,
-      '支店': 3,
-      '営業所': 3,
-      '工場': 4,
-      '事業所': 3,
-      'オフィス': 2,
-      '出張所': 2,
-      'その他': 1
-    };
-    return importanceMap[type] || 1;
-  }
 
   // Public functions
   /**
@@ -350,7 +303,6 @@ var SpreadsheetService = (function() {
       var requiredSheets = [
         { name: Constants.SHEET_CONFIG.SHEETS.COMPANY_LIST || '企業リスト', headers: getCompanyListHeaders() },
         { name: Constants.SHEET_CONFIG.SHEETS.HEADQUARTERS || '本社情報', headers: getHeadquartersHeaders() },
-        { name: Constants.SHEET_CONFIG.SHEETS.BRANCHES || '支店情報', headers: getBranchesHeaders() },
         { name: Constants.SHEET_CONFIG.SHEETS.SETTINGS || '設定', headers: getSettingsHeaders() },
         { name: Constants.SHEET_CONFIG.SHEETS.LOGS || 'ログ', headers: getLogsHeaders() },
         { name: Constants.SHEET_CONFIG.SHEETS.PROCESSING_STATUS || '処理状況', headers: getProcessingStatusHeaders() }
@@ -512,59 +464,7 @@ var SpreadsheetService = (function() {
     }
   }
 
-  /**
-   * Save branches info
-   */
-  function saveBranchesInfo(companyId, branches) {
-    try {
-      // スプレッドシートが初期化されていない場合は初期化
-      if (!_spreadsheet) {
-        _spreadsheet = getTargetSpreadsheet();
-      }
-      
-      var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.BRANCHES || '支店情報');
-      if (!sheet) throw new Error('Branches sheet not found');
 
-      // 企業名を取得（本社情報シートから）
-      var headquartersSheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.HEADQUARTERS || '本社情報');
-      var companyName = 'Unknown';
-      if (headquartersSheet) {
-        var companyRow = findCompanyRow(headquartersSheet, companyId);
-        if (companyRow > 0) {
-          companyName = headquartersSheet.getRange(companyRow, 2).getValue(); // 企業名は2列目
-        }
-      }
-
-      // 既存の支店データを削除
-      deleteExistingBranches(sheet, companyId);
-
-      // 新しい支店データを追加
-      branches.forEach(function(branch) {
-        var rowData = [
-          companyId,                    // 企業ID
-          branch.name || '',            // 支店名
-          branch.phone || '',           // 支店電話番号
-          branch.postalCode || '',      // 支店郵便番号
-          branch.prefecture || '',      // 支店都道府県
-          branch.city || '',            // 支店市区町村
-          branch.addressDetail || '',   // 支店住所詳細
-          branch.type || '',            // 支店種別
-          branch.importanceRank || calculateBranchImportance(branch.type), // 重要度ランク
-          branch.employees || branch.employeeCount || '', // 従業員数
-          branch.businessHours || '',   // 営業時間
-          branch.notes || ''            // 備考
-        ];
-        sheet.appendRow(rowData);
-        Logger.logDebug('支店情報を保存しました: ' + companyName + ' - ' + (branch.name || '名称不明'));
-      });
-
-      Logger.logInfo('支店情報保存完了: ' + companyName + ' (' + branches.length + '件)');
-      return true;
-    } catch (error) {
-      Logger.logError('Failed to save branches info', error);
-      return false;
-    }
-  }
 
   /**
    * Save news summary
@@ -684,7 +584,6 @@ var SpreadsheetService = (function() {
     getCompanyStatus: getCompanyStatus,
     updateCompanyStatus: updateCompanyStatus,
     saveHeadquartersInfo: saveHeadquartersInfo,
-    saveBranchesInfo: saveBranchesInfo,
     saveNewsSummary: saveNewsSummary,
     saveRecruitmentSummary: saveRecruitmentSummary,
     recordProcessingStatus: recordProcessingStatus,

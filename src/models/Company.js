@@ -73,9 +73,6 @@ var Company = (function() {
     this.processingResult = data.processingResult || null;
     this.errorMessage = data.errorMessage || null;
     
-    // Branch information (optional extended data)
-    this.branches = data.branches || [];
-    
     // Extended metadata (optional)
     this.lastUpdated = data.lastUpdated || null;
     this.dataVersion = data.dataVersion || '1.0';
