@@ -113,24 +113,7 @@ var Main = (function() {
     return address;
   }
 
-  /**
-   * Calculate branch importance
-   * @private
-   */
-  function calculateBranchImportance(type) {
-    var importanceMap = {
-      '本社': 5,
-      '支社': 4,
-      '支店': 3,
-      '営業所': 3,
-      '工場': 4,
-      '事業所': 3,
-      'オフィス': 2,
-      '出張所': 2,
-      'その他': 1
-    };
-    return importanceMap[type] || 1;
-  }
+  
 
   // Public functions
   /**
@@ -141,8 +124,18 @@ var Main = (function() {
       var ui = SpreadsheetApp.getUi();
       
       ui.createMenu('企業情報収集')
-        .addItem('バッチ処理開始', 'startBatchProcessing')
         .addItem('単一企業処理', 'processSingleCompany')
+        .addSeparator()
+        .addSubMenu(ui.createMenu('バッチ処理')
+          .addItem('バッチ処理開始', 'startBatchProcessingManually')
+          .addItem('バッチ処理停止', 'stopBatchProcessingManually')
+          .addItem('処理状況確認', 'checkProcessStatusManually'))
+        .addSeparator()
+        .addSubMenu(ui.createMenu('システム管理')
+          .addItem('システムメンテナンス実行', 'executeSystemMaintenanceManually')
+          .addItem('エラー監視実行', 'executeErrorMonitoringManually')
+          .addItem('パフォーマンスチェック実行', 'executePerformanceCheckManually')
+          .addItem('全プロセス停止', 'stopAllProcessesManually'))
         .addSeparator()
         .addSubMenu(ui.createMenu('設定')
           .addItem('APIキー設定', 'showApiKeyDialog')
@@ -166,18 +159,49 @@ var Main = (function() {
    */
   function createMenuManually() {
     try {
-      // アクティブなスプレッドシートを取得
+      // Check if we're in a spreadsheet context
       var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      
       if (!spreadsheet) {
-        console.log('No active spreadsheet found. Please open the spreadsheet first.');
-        return false;
+        console.log('❌ No active spreadsheet found. Please open a spreadsheet first.');
+        console.log('📝 Instructions:');
+        console.log('1. Open your Google Spreadsheet');
+        console.log('2. Go to Extensions > Apps Script');
+        console.log('3. Run this function again');
+        return {
+          success: false,
+          message: 'No active spreadsheet found. Please open a spreadsheet first.'
+        };
       }
       
       var ui = SpreadsheetApp.getUi();
       
+      if (!ui) {
+        console.log('❌ UI not available - this function should be run from a spreadsheet context');
+        console.log('📝 Instructions:');
+        console.log('1. Open your Google Spreadsheet');
+        console.log('2. Go to Extensions > Apps Script');
+        console.log('3. Run this function again');
+        return {
+          success: false,
+          message: 'UI not available - please run from spreadsheet context'
+        };
+      }
+      
+      // Create the menu
       ui.createMenu('企業情報収集')
-        .addItem('バッチ処理開始', 'startBatchProcessing')
         .addItem('単一企業処理', 'processSingleCompany')
+        .addSeparator()
+        .addSubMenu(ui.createMenu('バッチ処理')
+          .addItem('バッチ処理開始', 'startBatchProcessingManually')
+          .addItem('バッチ処理停止', 'stopBatchProcessingManually')
+          .addItem('処理状況確認', 'checkProcessStatusManually'))
+        .addSeparator()
+        .addSubMenu(ui.createMenu('システム管理')
+          .addItem('システムメンテナンス実行', 'executeSystemMaintenanceManually')
+          .addItem('エラー監視実行', 'executeErrorMonitoringManually')
+          .addItem('パフォーマンスチェック実行', 'executePerformanceCheckManually')
+          .addItem('全プロセス停止', 'stopAllProcessesManually'))
         .addSeparator()
         .addSubMenu(ui.createMenu('設定')
           .addItem('APIキー設定', 'showApiKeyDialog')
@@ -190,10 +214,26 @@ var Main = (function() {
         .addToUi();
         
       Logger.logInfo('企業情報収集メニューが手動で作成されました');
-      return true;
+      console.log('🎉 メニューが正常に作成されました！');
+      console.log('📋 スプレッドシートを確認して「企業情報収集」メニューを見つけてください');
+      
+      return {
+        success: true,
+        message: '企業情報収集メニューが正常に作成されました'
+      };
+      
     } catch (error) {
       Logger.logError('Failed to create menu manually', error);
-      return false;
+      console.log('❌ メニュー作成エラー:', error.message);
+      console.log('📝 解決方法:');
+      console.log('1. スプレッドシートを開いてください');
+      console.log('2. 拡張機能 > Apps Script を選択');
+      console.log('3. この関数を再実行してください');
+      
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 
@@ -205,24 +245,32 @@ var Main = (function() {
       var spreadsheetId = ConfigManager.get('SPREADSHEET_ID');
       
       if (!spreadsheetId) {
-        console.log('No spreadsheet ID configured. Please run initializeSystem first.');
-        return false;
+        Logger.logWarning('No spreadsheet configured');
+        return;
       }
       
-      console.log('Using configured spreadsheet ID: ' + spreadsheetId);
-      
-      // 設定されたスプレッドシートを開く
       var spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-      console.log('Opened spreadsheet: ' + spreadsheet.getName());
       
-      // スプレッドシートをアクティブにする
-      SpreadsheetApp.setActiveSpreadsheet(spreadsheet);
+      if (!spreadsheet) {
+        Logger.logError('Cannot open configured spreadsheet');
+        return;
+      }
       
       var ui = SpreadsheetApp.getUi();
       
       ui.createMenu('企業情報収集')
-        .addItem('バッチ処理開始', 'startBatchProcessing')
         .addItem('単一企業処理', 'processSingleCompany')
+        .addSeparator()
+        .addSubMenu(ui.createMenu('バッチ処理')
+          .addItem('バッチ処理開始', 'startBatchProcessingManually')
+          .addItem('バッチ処理停止', 'stopBatchProcessingManually')
+          .addItem('処理状況確認', 'checkProcessStatusManually'))
+        .addSeparator()
+        .addSubMenu(ui.createMenu('システム管理')
+          .addItem('システムメンテナンス実行', 'executeSystemMaintenanceManually')
+          .addItem('エラー監視実行', 'executeErrorMonitoringManually')
+          .addItem('パフォーマンスチェック実行', 'executePerformanceCheckManually')
+          .addItem('全プロセス停止', 'stopAllProcessesManually'))
         .addSeparator()
         .addSubMenu(ui.createMenu('設定')
           .addItem('APIキー設定', 'showApiKeyDialog')
@@ -240,6 +288,63 @@ var Main = (function() {
     } catch (error) {
       Logger.logError('Failed to create menu for configured spreadsheet', error);
       return false;
+    }
+  }
+
+  /**
+   * Create menu by spreadsheet ID (can be run from script editor)
+   */
+  function createMenuBySpreadsheetId(spreadsheetId) {
+    try {
+      if (!spreadsheetId) {
+        console.log('❌ スプレッドシートIDが指定されていません');
+        console.log('📝 使用方法: createMenuBySpreadsheetId("your-spreadsheet-id")');
+        return {
+          success: false,
+          message: 'スプレッドシートIDが必要です'
+        };
+      }
+      
+      console.log('🔍 スプレッドシートを開いています...');
+      console.log('   ID:', spreadsheetId);
+      
+      var spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+      
+      if (!spreadsheet) {
+        console.log('❌ 指定されたスプレッドシートが見つかりません');
+        return {
+          success: false,
+          message: '指定されたスプレッドシートが見つかりません'
+        };
+      }
+      
+      console.log('✅ スプレッドシート確認:', spreadsheet.getName());
+      console.log('   URL:', spreadsheet.getUrl());
+      
+      // Note: We cannot get UI from a different spreadsheet context
+      // This function is mainly for logging and verification
+      console.log('⚠️ 注意: スプレッドシートのメニューは、そのスプレッドシート内からのみ作成できます');
+      console.log('📝 次の手順でメニューを作成してください:');
+      console.log('1. 上記URLのスプレッドシートを開く');
+      console.log('2. 拡張機能 > Apps Script を選択');
+      console.log('3. createMenuManually() 関数を実行');
+      
+      return {
+        success: true,
+        spreadsheet: {
+          name: spreadsheet.getName(),
+          url: spreadsheet.getUrl(),
+          id: spreadsheet.getId()
+        },
+        message: 'スプレッドシートが確認されました。メニュー作成は該当スプレッドシートから実行してください。'
+      };
+      
+    } catch (error) {
+      console.log('❌ エラー:', error.message);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 
@@ -291,14 +396,14 @@ var Main = (function() {
   }
 
   /**
-   * Process multiple companies in batch
+   * Process multiple companies in batch (updated for manual control)
    */
   function processBatchCompanies() {
     try {
       var ui = SpreadsheetApp.getUi();
       var response = ui.prompt(
         'Batch Processing',
-        'Enter the number of companies to process (max 50):',
+        'Enter the number of companies to process (max 8 due to 6-minute execution limit):',
         ui.ButtonSet.OK_CANCEL
       );
       
@@ -308,21 +413,22 @@ var Main = (function() {
       
       var batchSize = parseInt(response.getResponseText());
       
-      if (isNaN(batchSize) || batchSize < 1 || batchSize > 50) {
-        ui.alert('Please enter a valid number between 1 and 50');
+      if (isNaN(batchSize) || batchSize < 1 || batchSize > 8) {
+        ui.alert('Please enter a valid number between 1 and 8 (execution time limit: 6 minutes)');
         return;
       }
-      
-      // Create a time-based trigger for batch processing
-      ScriptApp.newTrigger('processBatchWithTrigger')
-        .timeBased()
-        .after(1000) // Start after 1 second
-        .create();
         
       // Store batch size in script properties
       ConfigManager.set('BATCH_SIZE', batchSize.toString());
       
+      // Start batch processing manually
+      var result = TriggerManager.startBatchProcessing();
+      
+      if (result.success) {
       ui.alert('Batch processing started for ' + batchSize + ' companies. You will receive an email notification when complete.');
+      } else {
+        ui.alert('Error starting batch processing: ' + result.error);
+      }
       
     } catch (error) {
       ErrorHandler.handleError(error, { function: 'processBatchCompanies' });
@@ -331,24 +437,68 @@ var Main = (function() {
   }
 
   /**
-   * Start batch processing
+   * Start batch processing (updated for manual control)
    */
   function startBatchProcessing() {
     try {
-      if (typeof BatchProcessor !== 'undefined') {
-        var processor = BatchProcessor;
-        processor.startBatchProcessing();
+      var result = TriggerManager.startBatchProcessing();
+      
+      if (result.success) {
+        SpreadsheetApp.getUi().alert('バッチ処理を開始しました。処理完了時にメール通知が送信されます。');
       } else {
-        // Fallback to legacy processing
-        processBatchCompanies();
-        return;
+        SpreadsheetApp.getUi().alert('バッチ処理開始エラー: ' + result.error);
       }
       
-      SpreadsheetApp.getUi().alert('バッチ処理を開始しました。処理完了時にメール通知が送信されます。');
     } catch (error) {
       ErrorHandler.handleError(error, { function: 'startBatchProcessing' });
       SpreadsheetApp.getUi().alert('バッチ処理エラー: ' + error.toString());
     }
+  }
+
+  /**
+   * Display process status dialog
+   */
+  function showProcessStatusDialog() {
+    try {
+      var statusResult = TriggerManager.getAllProcessStatus();
+      
+      if (!statusResult.success) {
+        SpreadsheetApp.getUi().alert('Error getting process status: ' + statusResult.error);
+        return;
+      }
+      
+      var processes = statusResult.processes;
+      var statusText = '=== プロセス状況 ===\n\n';
+      
+      Object.keys(processes).forEach(function(processName) {
+        var status = processes[processName] ? '実行中' : '停止中';
+        var processDisplayName = getProcessDisplayName(processName);
+        statusText += processDisplayName + ': ' + status + '\n';
+      });
+      
+      statusText += '\n処理時刻: ' + new Date().toLocaleString('ja-JP');
+      
+      SpreadsheetApp.getUi().alert('プロセス状況', statusText, SpreadsheetApp.getUi().ButtonSet.OK);
+      
+    } catch (error) {
+      ErrorHandler.handleError(error, { function: 'showProcessStatusDialog' });
+      SpreadsheetApp.getUi().alert('プロセス状況確認エラー: ' + error.toString());
+    }
+  }
+
+  /**
+   * Get display name for process
+   * @private
+   */
+  function getProcessDisplayName(processName) {
+    var displayNames = {
+      'batchProcessing': 'バッチ処理',
+      'systemMaintenance': 'システムメンテナンス',
+      'errorMonitoring': 'エラー監視',
+      'performanceCheck': 'パフォーマンスチェック'
+    };
+    
+    return displayNames[processName] || processName;
   }
 
   /**
@@ -557,6 +707,128 @@ var Main = (function() {
     }
   }
 
+  /**
+   * Setup spreadsheet binding and create menu
+   */
+  function setupSpreadsheetBinding() {
+    try {
+      console.log('🔧 スプレッドシート紐づけセットアップ開始...');
+      
+      // Get spreadsheet URL from user
+      console.log('📝 手順:');
+      console.log('1. あなたのスプレッドシートのURLをコピーしてください');
+      console.log('2. setupSpreadsheetBindingWithUrl("スプレッドシートURL") を実行してください');
+      console.log('');
+      console.log('例: setupSpreadsheetBindingWithUrl("https://docs.google.com/spreadsheets/d/1ABC...XYZ/edit")');
+      
+      return {
+        success: false,
+        message: 'スプレッドシートURLが必要です。setupSpreadsheetBindingWithUrl()を使用してください。'
+      };
+      
+    } catch (error) {
+      console.log('❌ エラー:', error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Setup spreadsheet binding with URL
+   */
+  function setupSpreadsheetBindingWithUrl(spreadsheetUrl) {
+    try {
+      if (!spreadsheetUrl) {
+        console.log('❌ スプレッドシートURLが指定されていません');
+        return {
+          success: false,
+          message: 'スプレッドシートURLが必要です'
+        };
+      }
+      
+      console.log('🔍 スプレッドシートURL解析中...');
+      console.log('   URL:', spreadsheetUrl);
+      
+      // Extract spreadsheet ID from URL
+      var spreadsheetId = null;
+      var urlPattern = /\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/;
+      var match = spreadsheetUrl.match(urlPattern);
+      
+      if (match) {
+        spreadsheetId = match[1];
+        console.log('✅ スプレッドシートID抽出成功:', spreadsheetId);
+      } else {
+        console.log('❌ 無効なスプレッドシートURLです');
+        console.log('📝 正しい形式: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit');
+        return {
+          success: false,
+          message: '無効なスプレッドシートURLです'
+        };
+      }
+      
+      // Verify spreadsheet access
+      var spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+      
+      if (!spreadsheet) {
+        console.log('❌ スプレッドシートにアクセスできません');
+        return {
+          success: false,
+          message: 'スプレッドシートにアクセスできません'
+        };
+      }
+      
+      console.log('✅ スプレッドシート確認:', spreadsheet.getName());
+      
+      // Save spreadsheet ID to configuration
+      ConfigManager.set('SPREADSHEET_ID', spreadsheetId);
+      console.log('✅ スプレッドシートIDを設定に保存しました');
+      
+      // Create onOpen trigger for this spreadsheet
+      console.log('🔧 onOpenトリガーを作成中...');
+      
+      // Delete existing triggers first
+      var triggers = ScriptApp.getProjectTriggers();
+      triggers.forEach(function(trigger) {
+        if (trigger.getHandlerFunction() === 'onOpen') {
+          ScriptApp.deleteTrigger(trigger);
+        }
+      });
+      
+      // Create new onOpen trigger
+      ScriptApp.newTrigger('onOpen')
+        .onOpen()
+        .create();
+      
+      console.log('✅ onOpenトリガーを作成しました');
+      
+      console.log('');
+      console.log('🎉 セットアップ完了！');
+      console.log('📋 次の手順:');
+      console.log('1. スプレッドシートを開く: ' + spreadsheet.getUrl());
+      console.log('2. ページを更新する（F5キーまたはブラウザの更新ボタン）');
+      console.log('3. 「企業情報収集」メニューが表示されることを確認');
+      
+      return {
+        success: true,
+        spreadsheet: {
+          name: spreadsheet.getName(),
+          url: spreadsheet.getUrl(),
+          id: spreadsheet.getId()
+        },
+        message: 'スプレッドシートの紐づけが完了しました'
+      };
+      
+    } catch (error) {
+      console.log('❌ エラー:', error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
   // Return public API
   return {
     onOpen: onOpen,
@@ -573,7 +845,11 @@ var Main = (function() {
     diagnoseSystem: diagnoseSystem,
     checkCompanyListStatus: checkCompanyListStatus,
     parseAddressString: parseAddressString,
-    calculateBranchImportance: calculateBranchImportance
+
+    showProcessStatusDialog: showProcessStatusDialog,
+    createMenuBySpreadsheetId: createMenuBySpreadsheetId,
+    setupSpreadsheetBinding: setupSpreadsheetBinding,
+    setupSpreadsheetBindingWithUrl: setupSpreadsheetBindingWithUrl
   };
 })();
 
@@ -620,4 +896,201 @@ function diagnoseSystem() {
 
 function checkCompanyListStatus() {
   return Main.checkCompanyListStatus();
+}
+
+function showProcessStatusDialog() {
+  return Main.showProcessStatusDialog();
+}
+
+// Manual control functions for spreadsheet menu
+function startBatchProcessingManually() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var result = TriggerManager.startBatchProcessing();
+    
+    if (result.success) {
+      ui.alert('バッチ処理開始', 'バッチ処理を開始しました。処理完了時にメール通知が送信されます。', ui.ButtonSet.OK);
+    } else {
+      ui.alert('エラー', 'バッチ処理開始エラー: ' + result.error, ui.ButtonSet.OK);
+    }
+  } catch (error) {
+    Logger.logError('Error in startBatchProcessingManually', error);
+    SpreadsheetApp.getUi().alert('エラー', 'バッチ処理開始中にエラーが発生しました: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+function stopBatchProcessingManually() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var result = TriggerManager.stopBatchProcessing();
+    
+    if (result.success) {
+      ui.alert('バッチ処理停止', 'バッチ処理を停止しました。', ui.ButtonSet.OK);
+    } else {
+      ui.alert('エラー', 'バッチ処理停止エラー: ' + result.error, ui.ButtonSet.OK);
+    }
+  } catch (error) {
+    Logger.logError('Error in stopBatchProcessingManually', error);
+    SpreadsheetApp.getUi().alert('エラー', 'バッチ処理停止中にエラーが発生しました: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+function checkProcessStatusManually() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var statusResult = TriggerManager.getAllProcessStatus();
+    
+    if (!statusResult.success) {
+      ui.alert('エラー', 'プロセス状況取得エラー: ' + statusResult.error, ui.ButtonSet.OK);
+      return;
+    }
+    
+    var processes = statusResult.processes;
+    var statusText = '=== プロセス状況 ===\n\n';
+    
+    Object.keys(processes).forEach(function(processName) {
+      var status = processes[processName] ? '🟢 実行中' : '⚪ 停止中';
+      var processDisplayName = getProcessDisplayName(processName);
+      statusText += processDisplayName + ': ' + status + '\n';
+    });
+    
+    statusText += '\n🕐 確認時刻: ' + new Date().toLocaleString('ja-JP');
+    
+    ui.alert('プロセス状況', statusText, ui.ButtonSet.OK);
+    
+  } catch (error) {
+    Logger.logError('Error in checkProcessStatusManually', error);
+    SpreadsheetApp.getUi().alert('エラー', 'プロセス状況確認中にエラーが発生しました: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+function executeSystemMaintenanceManually() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var response = ui.alert('システムメンテナンス', 'システムメンテナンスを実行しますか？\n（キャッシュクリア、設定検証等を行います）', ui.ButtonSet.YES_NO);
+    
+    if (response !== ui.Button.YES) {
+      return;
+    }
+    
+    var result = TriggerManager.executeSystemMaintenance();
+    
+    if (result.success) {
+      ui.alert('システムメンテナンス完了', 'システムメンテナンスが正常に完了しました。', ui.ButtonSet.OK);
+    } else {
+      ui.alert('エラー', 'システムメンテナンスエラー: ' + result.error, ui.ButtonSet.OK);
+    }
+  } catch (error) {
+    Logger.logError('Error in executeSystemMaintenanceManually', error);
+    SpreadsheetApp.getUi().alert('エラー', 'システムメンテナンス中にエラーが発生しました: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+function executeErrorMonitoringManually() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var result = TriggerManager.executeErrorMonitoring();
+    
+    if (result.success) {
+      var message = 'エラー監視が完了しました。\n\n';
+      if (result.hasAlerts) {
+        message += '⚠️ ' + result.alerts.length + '件のアラートが検出されました。\n';
+        message += '詳細はメール通知またはログを確認してください。';
+      } else {
+        message += '✅ 重要なエラーは検出されませんでした。';
+      }
+      ui.alert('エラー監視完了', message, ui.ButtonSet.OK);
+    } else {
+      ui.alert('エラー', 'エラー監視実行エラー: ' + result.error, ui.ButtonSet.OK);
+    }
+  } catch (error) {
+    Logger.logError('Error in executeErrorMonitoringManually', error);
+    SpreadsheetApp.getUi().alert('エラー', 'エラー監視中にエラーが発生しました: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+function executePerformanceCheckManually() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var result = TriggerManager.executePerformanceCheck();
+    
+    if (result.success) {
+      var message = 'パフォーマンスチェックが完了しました。\n\n';
+      message += '📊 チェック時刻: ' + new Date(result.stats.timestamp).toLocaleString('ja-JP') + '\n';
+      message += '詳細な統計情報はログを確認してください。';
+      ui.alert('パフォーマンスチェック完了', message, ui.ButtonSet.OK);
+    } else {
+      ui.alert('エラー', 'パフォーマンスチェックエラー: ' + result.error, ui.ButtonSet.OK);
+    }
+  } catch (error) {
+    Logger.logError('Error in executePerformanceCheckManually', error);
+    SpreadsheetApp.getUi().alert('エラー', 'パフォーマンスチェック中にエラーが発生しました: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+function stopAllProcessesManually() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var response = ui.alert('全プロセス停止', '実行中のすべてのプロセスを停止しますか？', ui.ButtonSet.YES_NO);
+    
+    if (response !== ui.Button.YES) {
+      return;
+    }
+    
+    var result = TriggerManager.stopAllProcesses();
+    
+    if (result.success) {
+      var message = '全プロセスの停止が完了しました。\n\n';
+      Object.keys(result.results).forEach(function(processName) {
+        var processDisplayName = getProcessDisplayName(processName);
+        var status = result.results[processName];
+        message += processDisplayName + ': ' + status + '\n';
+      });
+      ui.alert('全プロセス停止完了', message, ui.ButtonSet.OK);
+    } else {
+      ui.alert('エラー', '全プロセス停止エラー: ' + result.error, ui.ButtonSet.OK);
+    }
+  } catch (error) {
+    Logger.logError('Error in stopAllProcessesManually', error);
+    SpreadsheetApp.getUi().alert('エラー', '全プロセス停止中にエラーが発生しました: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+function showApiKeyDialog() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var message = 'APIキー設定\n\n';
+    message += '以下の手順でAPIキーを設定してください：\n\n';
+    message += '1. スクリプトエディタで「プロジェクトの設定」をクリック\n';
+    message += '2. 「スクリプト プロパティ」タブを選択\n';
+    message += '3. 以下のプロパティを追加：\n\n';
+    message += '   • TAVILY_API_KEY: Tavily検索APIのキー\n';
+    message += '   • OPENAI_API_KEY: OpenAI APIのキー\n\n';
+    message += '4. 「プロパティを保存」をクリック';
+    
+    ui.alert('APIキー設定', message, ui.ButtonSet.OK);
+  } catch (error) {
+    Logger.logError('Error in showApiKeyDialog', error);
+    SpreadsheetApp.getUi().alert('エラー', 'APIキー設定ダイアログの表示中にエラーが発生しました: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+function showSpreadsheetSettings() {
+  return Main.showSpreadsheetSettings();
+}
+
+function getProcessDisplayName(processName) {
+  return Main.getProcessDisplayName(processName);
+}
+
+function createMenuBySpreadsheetId(spreadsheetId) {
+  return Main.createMenuBySpreadsheetId(spreadsheetId);
+}
+
+function setupSpreadsheetBinding() {
+  return Main.setupSpreadsheetBinding();
+}
+
+function setupSpreadsheetBindingWithUrl(spreadsheetUrl) {
+  return Main.setupSpreadsheetBindingWithUrl(spreadsheetUrl);
 }

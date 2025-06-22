@@ -216,6 +216,67 @@ var SetupGuide = (function() {
     };
   }
 
+  // テスト環境チェック
+  function checkTestEnvironment() {
+    console.log('🧪 テスト環境チェック');
+    console.log('═══════════════════════════════════════════════');
+    
+    try {
+      // TestSetup.jsの関数を使用
+      if (typeof checkTestEnvironment !== 'undefined') {
+        return checkTestEnvironment();
+      } else {
+        // 直接チェック
+        console.log('⚠️ TestSetup.jsが見つかりません。直接チェックします...');
+        
+        var testComponents = [
+          { name: 'GasT', check: function() { return typeof GasT !== 'undefined'; } },
+          { name: 'TestDataFactory', check: function() { return typeof TestDataFactory !== 'undefined'; } },
+          { name: 'MockFactory', check: function() { return typeof MockFactory !== 'undefined'; } }
+        ];
+        
+        var results = {};
+        testComponents.forEach(function(component) {
+          try {
+            results[component.name] = component.check();
+            console.log((results[component.name] ? '✅' : '❌') + ' ' + component.name);
+          } catch (e) {
+            results[component.name] = false;
+            console.log('❌ ' + component.name + ' (エラー: ' + e.message + ')');
+          }
+        });
+        
+        return results;
+      }
+    } catch (error) {
+      console.error('❌ テスト環境チェックエラー:', error.message);
+      return { error: error.message };
+    }
+  }
+
+  // セーフテスト実行
+  function runSafeTests() {
+    console.log('🚀 セーフテスト実行');
+    console.log('═══════════════════════════════════════════════');
+    
+    try {
+      // TestSetup.jsの関数を使用
+      if (typeof runTestsSafely !== 'undefined') {
+        return runTestsSafely();
+      } else {
+        console.log('⚠️ TestSetup.jsが見つかりません');
+        console.log('💡 解決方法:');
+        console.log('  1. clasp push でファイルをアップロード');
+        console.log('  2. Google Apps Scriptエディタでファイル一覧を確認');
+        console.log('  3. TestSetup.jsが存在するか確認');
+        return { success: false, error: 'TestSetup.js not found' };
+      }
+    } catch (error) {
+      console.error('❌ セーフテスト実行エラー:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
   // ヘルプ表示
   function showHelp() {
     console.log('📚 Corporate Research System - セットアップヘルプ');
@@ -231,10 +292,17 @@ var SetupGuide = (function() {
     console.log('  SetupGuide.verifyComplete() - セットアップ完了確認');
     console.log('');
     console.log('🧪 テスト実行:');
-    console.log('  runInitializationTest()     - 初期化テスト');
-    console.log('  testApiConnectivity()       - API接続テスト');
-    console.log('  createSampleSpreadsheet()   - スプレッドシート作成');
-    console.log('  setupTriggers()             - トリガー設定');
+    console.log('  SetupGuide.checkTestEnvironment() - テスト環境チェック');
+    console.log('  SetupGuide.runSafeTests()    - セーフテスト実行');
+    console.log('  runInitializationTest()      - 初期化テスト');
+    console.log('  testApiConnectivity()        - API接続テスト');
+    console.log('  createSampleSpreadsheet()    - スプレッドシート作成');
+    console.log('  setupTriggers()              - トリガー設定');
+    console.log('');
+    console.log('💡 テストエラーが発生した場合:');
+    console.log('  1. SetupGuide.checkTestEnvironment() でテスト環境を確認');
+    console.log('  2. SetupGuide.runSafeTests() でセーフテストを実行');
+    console.log('  3. clasp push でファイルを同期');
     console.log('');
     console.log('💡 まずは SetupGuide.showWelcome() から始めてください！');
   }
@@ -246,6 +314,8 @@ var SetupGuide = (function() {
     checkStatus: checkStatus,
     quickSetup: quickSetup,
     verifyComplete: verifyComplete,
+    checkTestEnvironment: checkTestEnvironment,
+    runSafeTests: runSafeTests,
     showHelp: showHelp
   };
 })();
@@ -269,4 +339,43 @@ function quickSetup() {
 
 function showSetupHelp() {
   return SetupGuide.showHelp();
+}
+
+// テスト関連のグローバル関数
+function checkTestEnvironment() {
+  return SetupGuide.checkTestEnvironment();
+}
+
+function runSafeTests() {
+  return SetupGuide.runSafeTests();
+}
+
+function testEnvironmentCheck() {
+  console.log('🧪 テスト環境チェックを実行します...');
+  try {
+    if (typeof checkTestEnvironment !== 'undefined') {
+      return checkTestEnvironment();
+    } else {
+      console.log('⚠️ TestSetup.jsが見つかりません。SetupGuideの機能を使用します。');
+      return SetupGuide.checkTestEnvironment();
+    }
+  } catch (error) {
+    console.error('❌ テスト環境チェックエラー:', error.message);
+    return { error: error.message };
+  }
+}
+
+function runTestsSafely() {
+  console.log('🚀 セーフテスト実行を開始します...');
+  try {
+    if (typeof runTestsSafely !== 'undefined') {
+      return runTestsSafely();
+    } else {
+      console.log('⚠️ TestSetup.jsが見つかりません。SetupGuideの機能を使用します。');
+      return SetupGuide.runSafeTests();
+    }
+  } catch (error) {
+    console.error('❌ セーフテスト実行エラー:', error.message);
+    return { success: false, error: error.message };
+  }
 }

@@ -4,21 +4,20 @@
  */
 
 function startSystemSetup() {
-  console.log('🚀 Corporate Research System - セットアップ開始');
+  console.log('🚀 Corporate Research System セットアップガイド');
   console.log('═══════════════════════════════════════════════');
   console.log('');
-  console.log('このガイドに従ってシステムを設定してください:');
+  console.log('📋 セットアップ手順:');
+  console.log('1️⃣ runInitializationTest() でシステム確認');
+  console.log('2️⃣ setupApiKeysGuide() でAPIキー設定ガイド表示');
+  console.log('3️⃣ testApiConnectivity() でAPI接続テスト');
+  console.log('4️⃣ createSampleSpreadsheet() でスプレッドシート作成');
+  console.log('5️⃣ initializeManualControlSystem() で手動制御システム初期化');
+  console.log('6️⃣ completeSetupProcess() でセットアップ完了確認');
   console.log('');
-  console.log('1️⃣ まず runInitializationTest() を実行してシステムの状態を確認');
-  console.log('2️⃣ APIキーを設定（下記の setupApiKeysGuide() 参照）');
-  console.log('3️⃣ testApiConnectivity() でAPI接続をテスト');
-  console.log('4️⃣ createSampleSpreadsheet() でスプレッドシートを準備');
-  console.log('5️⃣ setupTriggers() で自動処理を設定');
-  console.log('6️⃣ testSampleCompanyResearch() で実際の企業調査をテスト');
+  console.log('💡 まずは runInitializationTest() を実行してください！');
   console.log('');
-  console.log('💡 各ステップで問題が発生した場合は showHelp() を実行してください');
-  console.log('');
-  console.log('次の関数を実行してください: runInitializationTest()');
+  console.log('🆘 ヘルプが必要な場合は showAdvancedHelp() を実行してください');
 }
 
 function setupApiKeysGuide() {
@@ -162,50 +161,77 @@ function completeSetupProcess() {
     setupChecklist.push({ item: 'スプレッドシート', status: '❌', error: e.message });
   }
   
-  // 4. トリガー確認
+  // 4. 手動制御システム確認（トリガーの代わり）
   try {
-    var triggerStatus = TriggerManager.getTriggerStatus();
-    if (triggerStatus.success && triggerStatus.triggerCount > 0) {
-      setupChecklist.push({ item: 'トリガー設定', status: '✅' });
+    var manualControlTest = TriggerManager.testManualControlSystem();
+    if (manualControlTest.success) {
+      setupChecklist.push({ item: '手動制御システム', status: '✅' });
     } else {
-      setupChecklist.push({ item: 'トリガー設定', status: '❌', error: 'トリガー未設定' });
+      setupChecklist.push({ item: '手動制御システム', status: '❌', error: manualControlTest.error });
     }
   } catch (e) {
-    setupChecklist.push({ item: 'トリガー設定', status: '❌', error: e.message });
+    setupChecklist.push({ item: '手動制御システム', status: '❌', error: e.message });
+  }
+  
+  // 5. 自動トリガー確認（存在しないことを確認）
+  try {
+    var triggerStatus = TriggerManager.getTriggerStatus();
+    if (triggerStatus.success && triggerStatus.triggerCount === 0) {
+      setupChecklist.push({ item: '自動トリガー無効化', status: '✅' });
+    } else if (triggerStatus.success && triggerStatus.triggerCount > 0) {
+      setupChecklist.push({ item: '自動トリガー無効化', status: '⚠️', error: triggerStatus.triggerCount + '個の自動トリガーが残存' });
+    } else {
+      setupChecklist.push({ item: '自動トリガー無効化', status: '❌', error: triggerStatus.error });
+    }
+  } catch (e) {
+    setupChecklist.push({ item: '自動トリガー無効化', status: '❌', error: e.message });
   }
   
   // 結果表示
-  console.log('セットアップ状況:');
-  var completedItems = 0;
+  var passedChecks = 0;
+  var warningChecks = 0;
+  
+  console.log('');
   setupChecklist.forEach(function(check) {
-    console.log(' ', check.status, check.item);
+    console.log(check.status + ' ' + check.item);
     if (check.error) {
-      console.log('     エラー:', check.error);
+      console.log('    ' + check.error);
     }
-    if (check.status === '✅') {
-      completedItems++;
-    }
+    if (check.status === '✅') passedChecks++;
+    if (check.status === '⚠️') warningChecks++;
   });
   
-  console.log('\n完了状況:', completedItems + '/' + setupChecklist.length);
+  var totalChecks = setupChecklist.length;
+  var completionRate = Math.round((passedChecks / totalChecks) * 100);
   
-  if (completedItems === setupChecklist.length) {
-    console.log('🎉 セットアップ完了！システムを使用する準備ができました');
-    console.log('\n次にできること:');
-    console.log('• testSampleCompanyResearch() - 企業調査テスト');
-    console.log('• startBatchProcessing() - バッチ処理開始');
-    console.log('• runQuickTest() - クイックテスト実行');
+  console.log('\n📊 セットアップ完了率: ' + completionRate + '%');
+  console.log('   ✅ 成功: ' + passedChecks + '/' + totalChecks);
+  if (warningChecks > 0) {
+    console.log('   ⚠️ 警告: ' + warningChecks + '/' + totalChecks);
+  }
+  
+  if (completionRate >= 80) {
+    console.log('\n🎉 セットアップ完了！');
+    console.log('');
+    console.log('🎮 手動制御システムが有効になりました');
+    console.log('📝 スプレッドシートのメニューから各機能を手動実行できます：');
+    console.log('   • バッチ処理の開始・停止');
+    console.log('   • プロセス状況の確認');
+    console.log('   • システムメンテナンス');
+    console.log('   • エラー監視・パフォーマンスチェック');
+    console.log('');
+    console.log('🚀 企業情報収集システムの使用準備が完了しました！');
   } else {
-    console.log('⚠️ セットアップが完了していません');
-    console.log('\n不足している項目を確認して設定してください');
-    console.log('詳細は setupApiKeysGuide() または showHelp() を参照');
+    console.log('\n⚠️ セットアップが未完了です');
+    console.log('上記のエラーを解決してから再度実行してください');
   }
   
   return {
-    completed: completedItems,
-    total: setupChecklist.length,
-    checklist: setupChecklist,
-    isComplete: completedItems === setupChecklist.length
+    completionRate: completionRate,
+    passed: passedChecks,
+    total: totalChecks,
+    warnings: warningChecks,
+    checklist: setupChecklist
   };
 }
 
@@ -237,9 +263,9 @@ function continueQuickSetup() {
   console.log('\nStep 4/5: スプレッドシート準備');
   createSampleSpreadsheet();
   
-  // ステップ5: トリガー設定
-  console.log('\nStep 5/5: トリガー設定');
-  setupTriggers();
+  // ステップ5: 手動制御システム初期化
+  console.log('\nStep 5/5: 手動制御システム初期化');
+  initializeManualControlSystem();
   
   // 完了チェック
   console.log('\n最終確認...');
@@ -262,6 +288,10 @@ function resetSystem() {
     CacheService.getScriptCache().removeAll([]);
     console.log('キャッシュクリア: ✅');
     
+    // プロセス状態リセット
+    var processResult = TriggerManager.stopAllProcesses();
+    console.log('プロセス停止:', processResult.success ? '✅' : '❌');
+    
     // 設定は保持（APIキーなど）
     console.log('設定保持: ✅ (APIキーは保持されます)');
     
@@ -270,6 +300,63 @@ function resetSystem() {
     
   } catch (error) {
     console.log('❌ リセット中にエラー:', error.toString());
+  }
+}
+
+// 新しい手動制御システム初期化関数
+function initializeManualControlSystem() {
+  console.log('🎮 手動制御システム初期化');
+  console.log('═══════════════════════════════════════════════');
+  
+  try {
+    // 手動制御システムのテスト
+    var testResult = TriggerManager.testManualControlSystem();
+    
+    if (testResult.success) {
+      console.log('✅ 手動制御システム: 正常');
+      console.log('   プロセス数:', testResult.processCount);
+    } else {
+      console.log('❌ 手動制御システム: エラー -', testResult.error);
+      return false;
+    }
+    
+    // プロセス状態の初期化
+    var statusResult = TriggerManager.getAllProcessStatus();
+    if (statusResult.success) {
+      console.log('✅ プロセス状態管理: 正常');
+      console.log('   管理対象プロセス:', statusResult.processCount + '個');
+    } else {
+      console.log('❌ プロセス状態管理: エラー -', statusResult.error);
+      return false;
+    }
+    
+    // 既存の自動トリガーを削除
+    var triggerStatus = TriggerManager.getTriggerStatus();
+    if (triggerStatus.success && triggerStatus.triggerCount > 0) {
+      console.log('⚠️ 既存の自動トリガーを削除中...');
+      var deleteResult = TriggerManager.deleteAllTriggers();
+      if (deleteResult.success) {
+        console.log('✅ 自動トリガー削除完了:', deleteResult.deletedCount + '個削除');
+      } else {
+        console.log('❌ 自動トリガー削除エラー:', deleteResult.error);
+      }
+    } else {
+      console.log('✅ 自動トリガーなし（手動制御モード）');
+    }
+    
+    console.log('\n🎉 手動制御システム初期化完了！');
+    console.log('');
+    console.log('📝 使用方法:');
+    console.log('• スプレッドシートメニューから各機能を手動実行');
+    console.log('• バッチ処理: 「バッチ処理」→「バッチ処理開始」');
+    console.log('• 状況確認: 「バッチ処理」→「処理状況確認」');
+    console.log('• システム管理: 「システム管理」から各機能を実行');
+    
+    return true;
+    
+  } catch (error) {
+    console.log('❌ 手動制御システム初期化エラー:', error.toString());
+    return false;
   }
 }
 
@@ -295,12 +382,20 @@ function showAdvancedHelp() {
   console.log('  testApiConnectivity()       - API接続テスト');
   console.log('  testSampleCompanyResearch() - 企業調査テスト');
   console.log('  createSampleSpreadsheet()   - サンプルスプレッドシート作成');
-  console.log('  setupTriggers()             - トリガー設定');
+  console.log('  initializeManualControlSystem() - 手動制御システム初期化');
+  console.log('');
+  console.log('🎮 手動制御関数:');
+  console.log('  TriggerManager.startBatchProcessing() - バッチ処理開始');
+  console.log('  TriggerManager.stopBatchProcessing()  - バッチ処理停止');
+  console.log('  TriggerManager.getAllProcessStatus()  - プロセス状況確認');
+  console.log('  TriggerManager.stopAllProcesses()     - 全プロセス停止');
   console.log('');
   console.log('🔧 システム管理関数:');
   console.log('  resetSystem()               - システムリセット');
-  console.log('  TriggerManager.getTriggerStatus() - トリガー状況確認');
-  console.log('  ConfigManager.validate()    - 設定検証');
+  console.log('  TriggerManager.executeSystemMaintenance() - システムメンテナンス');
+  console.log('  TriggerManager.executeErrorMonitoring()   - エラー監視');
+  console.log('  TriggerManager.executePerformanceCheck()  - パフォーマンスチェック');
   console.log('');
   console.log('💡 まずは startSystemSetup() を実行してください！');
+  console.log('🎮 時間ベースの自動実行は廃止され、すべて手動制御になりました');
 }

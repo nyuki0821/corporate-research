@@ -181,162 +181,193 @@ var CompanyResearchService = (function() {
    * Research company information
    */
   function researchCompany(companyName, phoneNumber) {
-    return new Promise(function(resolve, reject) {
-      var startTime = Date.now();
-      
-      try {
-        if (!companyName || companyName.trim() === '') {
-          throw new Error('Company name is required');
-        }
-
-        Logger.logInfo('Starting research for company: ' + companyName);
-
-        var companyId = generateCompanyId(companyName);
-        var searchPromises = [];
-        
-        // Search using company name
-        searchPromises.push(
-          TavilyClient.searchCompany(companyName, {
-            additionalTerms: '本社 設立 従業員数 資本金',
-            max_results: 8
-          })
-        );
-
-        // Search using phone number if provided
-        if (phoneNumber && phoneNumber.trim() !== '') {
-          searchPromises.push(
-            TavilyClient.searchByPhoneNumber(phoneNumber)
-          );
-        }
-
-        Promise.all(searchPromises)
-          .then(function(searchResults) {
-            // Combine search results
-            var combinedResults = {
-              success: true,
-              results: []
-            };
-
-            searchResults.forEach(function(result) {
-              if (result.success && result.results) {
-                combinedResults.results = combinedResults.results.concat(result.results);
-              }
-            });
-
-            // Validate search results
-            var validation = validateSearchResults(combinedResults, companyName);
-            
-            if (!validation.isValid) {
-              Logger.logWarning('Search validation failed for: ' + companyName, validation);
-              
-              updateStats(false, Date.now() - startTime);
-              resolve({
-                success: false,
-                error: 'No relevant search results found',
-                validation: validation,
-                companyName: companyName
-              });
-              return;
-            }
-
-            Logger.logInfo('Search completed for: ' + companyName, {
-              totalResults: combinedResults.results.length,
-              confidence: validation.confidence
-            });
-
-            // Extract company information using AI
-            OpenAIClient.extractCompanyInfo(companyName, combinedResults, phoneNumber)
-              .then(function(extractionResult) {
-                if (!extractionResult.success) {
-                  Logger.logWarning('Information extraction failed for: ' + companyName);
-                  
-                  updateStats(false, Date.now() - startTime);
-                  resolve({
-                    success: false,
-                    error: 'Failed to extract company information',
-                    extractionResult: extractionResult,
-                    searchValidation: validation
-                  });
-                  return;
-                }
-
-                // Calculate reliability score
-                var reliabilityScore = calculateReliabilityScore(
-                  extractionResult.data,
-                  validation,
-                  extractionResult.success
-                );
-
-                // Add metadata to extracted data
-                var enhancedData = Object.assign({}, extractionResult.data, {
-                  id: companyId,
-                  reliabilityScore: reliabilityScore,
-                  processedAt: new Date().toISOString(),
-                  processingResult: 'SUCCESS',
-                  sourceUrls: combinedResults.results.map(function(r) { return r.url; }).slice(0, 5)
-                });
-
-                // Create company object
-                var company = createCompanyObject(
-                  enhancedData,
-                  companyId,
-                  enhancedData.sourceUrls
-                );
-
-                var duration = Date.now() - startTime;
-                updateStats(true, duration);
-
-                Logger.logInfo('Research completed successfully for: ' + companyName, {
-                  duration: duration + 'ms',
-                  reliabilityScore: reliabilityScore,
-                  fieldsExtracted: Object.keys(extractionResult.data).length
-                });
-
-                resolve({
-                  success: true,
-                  company: company,
-                  searchValidation: validation,
-                  extractionResult: extractionResult,
-                  processingTime: duration,
-                  metadata: {
-                    searchResultCount: combinedResults.results.length,
-                    confidence: validation.confidence,
-                    reliabilityScore: reliabilityScore
-                  }
-                });
-              })
-              .catch(function(extractionError) {
-                Logger.logError('Extraction error for company: ' + companyName, extractionError);
-                
-                updateStats(false, Date.now() - startTime);
-                ErrorHandler.handleError(extractionError, {
-                  function: 'researchCompany',
-                  companyName: companyName,
-                  stage: 'extraction'
-                });
-                
-                reject(extractionError);
-              });
-          })
-          .catch(function(searchError) {
-            Logger.logError('Search error for company: ' + companyName, searchError);
-            
-            updateStats(false, Date.now() - startTime);
-            ErrorHandler.handleError(searchError, {
-              function: 'researchCompany',
-              companyName: companyName,
-              stage: 'search'
-            });
-            
-            reject(searchError);
-          });
-
-      } catch (error) {
-        updateStats(false, Date.now() - startTime);
-        Logger.logError('Exception in researchCompany', error);
-        reject(error);
+    var startTime = Date.now();
+    
+    try {
+      if (!companyName || companyName.trim() === '') {
+        throw new Error('Company name is required');
       }
-    });
+
+      // 電話番号を文字列に変換（数値の場合もあるため）
+      if (phoneNumber !== null && phoneNumber !== undefined && phoneNumber !== '') {
+        phoneNumber = String(phoneNumber).trim();
+      } else {
+        phoneNumber = '';
+      }
+
+      Logger.logInfo('Starting research for company: ' + companyName);
+
+      var companyId = generateCompanyId(companyName);
+      var searchResults = [];
+      
+      // Search using company name
+      var companySearchResult = TavilyClient.searchCompany(companyName, {
+        additionalTerms: '本社 設立 従業員数 資本金 代表取締役 電話番号 郵便番号 企業理念 支店 営業所 事業所 支社',
+        max_results: 10
+      });
+      searchResults.push(companySearchResult);
+
+      // Search using phone number if provided
+      if (phoneNumber && phoneNumber !== '') {
+        var phoneSearchResult = TavilyClient.searchByPhoneNumber(phoneNumber);
+        searchResults.push(phoneSearchResult);
+      }
+
+      // Combine search results
+      var combinedResults = {
+        success: true,
+        results: []
+      };
+
+      searchResults.forEach(function(searchResult) {
+        if (searchResult.success && searchResult.results) {
+          combinedResults.results = combinedResults.results.concat(searchResult.results);
+        }
+      });
+
+      // Validate search results
+      var validation = validateSearchResults(combinedResults, companyName);
+      
+      // 検索結果が少ない場合でも処理を続行（緩和されたバリデーション）
+      if (!validation.isValid && combinedResults.results.length === 0) {
+        Logger.logWarning('No search results found for: ' + companyName, validation);
+        
+        updateStats(false, Date.now() - startTime);
+        return {
+          success: false,
+          error: 'No search results found',
+          validation: validation,
+          companyName: companyName
+        };
+      } else if (!validation.isValid && combinedResults.results.length > 0) {
+        // 検索結果はあるが関連性が低い場合は警告を出して処理続行
+        Logger.logWarning('Search results have low relevance but proceeding: ' + companyName, validation);
+        validation.isValid = true; // 処理続行のためtrueに設定
+        validation.confidence = Math.max(validation.confidence, 0.3); // 最低限の信頼度を設定
+      }
+
+      Logger.logInfo('Search completed for: ' + companyName, {
+        totalResults: combinedResults.results.length,
+        confidence: validation.confidence
+      });
+
+      // Extract company information using AI (single extraction for both headquarters and branches)
+      var extractionResult = OpenAIClient.extractCompanyInfo(companyName, combinedResults, phoneNumber);
+      
+      if (!extractionResult.success) {
+        Logger.logWarning('Information extraction failed for: ' + companyName);
+        
+        updateStats(false, Date.now() - startTime);
+        return {
+          success: false,
+          error: 'Failed to extract company information',
+          extractionResult: extractionResult,
+          searchValidation: validation
+        };
+      }
+
+      // Calculate reliability score
+      var reliabilityScore = calculateReliabilityScore(
+        extractionResult.data,
+        validation,
+        extractionResult.success
+      );
+
+      // OpenAIが返した信頼性スコアが数値でない場合は計算値で上書き
+      var openaiReliabilityScore = extractionResult.data.reliabilityScore;
+      if (typeof openaiReliabilityScore !== 'number' || 
+          isNaN(openaiReliabilityScore) || 
+          openaiReliabilityScore < 0 || 
+          openaiReliabilityScore > 100) {
+        Logger.logWarning('OpenAI信頼性スコアが無効、計算値で上書き: ' + openaiReliabilityScore + ' → ' + reliabilityScore);
+      } else {
+        // OpenAIの値が有効な場合はそれを使用
+        reliabilityScore = openaiReliabilityScore;
+      }
+
+      // Add metadata to extracted data
+      var enhancedData = Object.assign({}, extractionResult.data, {
+        id: companyId,
+        reliabilityScore: reliabilityScore,
+        processedAt: new Date().toISOString(),
+        processingResult: 'SUCCESS',
+        sourceUrls: combinedResults.results.map(function(r) { return r.url; }).slice(0, 5)
+      });
+
+      // Extract branch information from the main extraction result
+      var branches = [];
+      if (extractionResult.data.branches && Array.isArray(extractionResult.data.branches)) {
+        Logger.logInfo('支店情報抽出: ' + companyName + ' (' + extractionResult.data.branches.length + '件)');
+        
+        branches = extractionResult.data.branches.map(function(branch, index) {
+          Logger.logDebug('支店' + (index + 1) + ': ' + 
+            (branch.name || '名称不明') + ' (' + (branch.type || 'タイプ不明') + ') - ' +
+            (branch.prefecture || '') + (branch.city || '') + ' ' +
+            (branch.phone || '電話番号なし'));
+            
+          return {
+            companyId: companyId,
+            name: branch.name || '',
+            type: branch.type || 'その他',
+            phone: branch.phone || '',
+            postalCode: branch.postalCode || '',
+            prefecture: branch.prefecture || '',
+            city: branch.city || '',
+            addressDetail: branch.addressDetail || '',
+            employees: branch.employees || null,
+            businessHours: branch.businessHours || '',
+            notes: branch.notes || ''
+          };
+        });
+        
+        Logger.logInfo('支店情報処理完了: ' + companyName + ' (' + branches.length + '件)');
+      } else {
+        Logger.logInfo('支店情報なし: ' + companyName);
+      }
+
+      // Create company object
+      var company = createCompanyObject(
+        enhancedData,
+        companyId,
+        enhancedData.sourceUrls
+      );
+
+      var duration = Date.now() - startTime;
+      updateStats(true, duration);
+
+      Logger.logInfo('Research completed successfully for: ' + companyName, {
+        duration: duration + 'ms',
+        reliabilityScore: reliabilityScore,
+        fieldsExtracted: Object.keys(extractionResult.data).length,
+        branchCount: branches.length
+      });
+
+      return {
+        success: true,
+        company: company,
+        branches: branches,
+        searchValidation: validation,
+        extractionResult: extractionResult,
+        processingTime: duration,
+        metadata: {
+          searchResultCount: combinedResults.results.length,
+          confidence: validation.confidence,
+          reliabilityScore: reliabilityScore,
+          branchCount: branches.length
+        }
+      };
+
+    } catch (error) {
+      updateStats(false, Date.now() - startTime);
+      Logger.logError('Exception in researchCompany', error);
+      ErrorHandler.handleError(error, {
+        function: 'researchCompany',
+        companyName: companyName,
+        stage: 'general'
+      });
+      
+      throw error;
+    }
   }
 
   /**

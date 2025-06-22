@@ -125,46 +125,41 @@ var ApiBase = (function() {
     if (!maxRetries) maxRetries = ConfigManager.getNumber('MAX_RETRY_COUNT', 3);
     if (!retryDelay) retryDelay = ConfigManager.getNumber('RETRY_DELAY_MS', 1000);
     
-    return new Promise(function(resolve, reject) {
-      var attempt = 0;
+    var attempt = 0;
+    
+    while (attempt < maxRetries) {
+      attempt++;
       
-      function tryRequest() {
-        attempt++;
+      try {
+        var result = requestFunction();
+        return result; // 成功時は結果を直接返す
+      } catch (error) {
+        Logger.logWarning('API request failed (attempt ' + attempt + '/' + maxRetries + ')', error);
         
-        try {
-          var result = requestFunction();
-          resolve(result);
-        } catch (error) {
-          Logger.logWarning('API request failed (attempt ' + attempt + '/' + maxRetries + ')', error);
-          
-          if (attempt >= maxRetries) {
-            Logger.logError('API request failed after ' + maxRetries + ' attempts', error);
-            reject(error);
-            return;
-          }
-          
-          // Check if error is retryable
-          var isRetryable = ErrorHandler.isRetryable(ErrorHandler.errorTypes.API_ERROR) ||
-                           error.message.indexOf('Rate limit') !== -1 ||
-                           error.message.indexOf('Server error') !== -1 ||
-                           error.message.indexOf('timeout') !== -1;
-          
-          if (!isRetryable) {
-            Logger.logError('Non-retryable error, aborting', error);
-            reject(error);
-            return;
-          }
-          
-          // Calculate delay with exponential backoff
-          var delay = retryDelay * Math.pow(2, attempt - 1);
-          Logger.logDebug('Retrying in ' + delay + 'ms');
-          
-          setTimeout(tryRequest, delay);
+        if (attempt >= maxRetries) {
+          Logger.logError('API request failed after ' + maxRetries + ' attempts', error);
+          throw error; // 最大試行回数に達した場合はエラーを投げる
         }
+        
+        // Check if error is retryable
+        var isRetryable = ErrorHandler.isRetryable(ErrorHandler.errorTypes.API_ERROR) ||
+                         error.message.indexOf('Rate limit') !== -1 ||
+                         error.message.indexOf('Server error') !== -1 ||
+                         error.message.indexOf('timeout') !== -1;
+        
+        if (!isRetryable) {
+          Logger.logError('Non-retryable error, aborting', error);
+          throw error; // リトライ不可能なエラーの場合は即座に投げる
+        }
+        
+        // Calculate delay with exponential backoff
+        var delay = retryDelay * Math.pow(2, attempt - 1);
+        Logger.logDebug('Retrying in ' + delay + 'ms');
+        
+        // Google Apps ScriptではsetTimeoutの代わりにUtilities.sleepを使用
+        Utilities.sleep(delay);
       }
-      
-      tryRequest();
-    });
+    }
   }
 
   // Public functions
@@ -183,12 +178,12 @@ var ApiBase = (function() {
       cacheKey = 'GET_' + fullUrl.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 200);
       var cached = getFromCache(cacheKey);
       if (cached) {
-        return Promise.resolve(cached);
+        return cached; // 同期的に返す
       }
     }
     
-    return new Promise(function(resolve, reject) {
-      executeWithRetry(function() {
+    try {
+      var data = executeWithRetry(function() {
         applyRateLimit(options.rateLimitDelay);
         
         var requestOptions = {
@@ -204,18 +199,21 @@ var ApiBase = (function() {
         
         Logger.logDebug('Making GET request to: ' + fullUrl);
         var response = UrlFetchApp.fetch(fullUrl, requestOptions);
-        var data = handleResponse(response, fullUrl);
+        var responseData = handleResponse(response, fullUrl);
         
         // Cache successful response
         if (cacheKey && options.useCache !== false) {
-          saveToCache(cacheKey, data, options.cacheExpiration);
+          saveToCache(cacheKey, responseData, options.cacheExpiration);
         }
         
-        return data;
-      }, options.maxRetries, options.retryDelay)
-      .then(resolve)
-      .catch(reject);
-    });
+        return responseData;
+      }, options.maxRetries, options.retryDelay);
+      
+      return data;
+    } catch (error) {
+      Logger.logError('GET request failed: ' + fullUrl, error);
+      throw error;
+    }
   }
 
   /**
@@ -224,8 +222,8 @@ var ApiBase = (function() {
   function post(url, payload, options) {
     if (!options) options = {};
     
-    return new Promise(function(resolve, reject) {
-      executeWithRetry(function() {
+    try {
+      var data = executeWithRetry(function() {
         applyRateLimit(options.rateLimitDelay);
         
         var requestOptions = {
@@ -254,10 +252,13 @@ var ApiBase = (function() {
         Logger.logDebug('Making POST request to: ' + url);
         var response = UrlFetchApp.fetch(url, requestOptions);
         return handleResponse(response, url);
-      }, options.maxRetries, options.retryDelay)
-      .then(resolve)
-      .catch(reject);
-    });
+      }, options.maxRetries, options.retryDelay);
+      
+      return data;
+    } catch (error) {
+      Logger.logError('POST request failed: ' + url, error);
+      throw error;
+    }
   }
 
   /**
@@ -275,8 +276,8 @@ var ApiBase = (function() {
   function deleteRequest(url, options) {
     if (!options) options = {};
     
-    return new Promise(function(resolve, reject) {
-      executeWithRetry(function() {
+    try {
+      var data = executeWithRetry(function() {
         applyRateLimit(options.rateLimitDelay);
         
         var requestOptions = {
@@ -293,10 +294,13 @@ var ApiBase = (function() {
         Logger.logDebug('Making DELETE request to: ' + url);
         var response = UrlFetchApp.fetch(url, requestOptions);
         return handleResponse(response, url);
-      }, options.maxRetries, options.retryDelay)
-      .then(resolve)
-      .catch(reject);
-    });
+      }, options.maxRetries, options.retryDelay);
+      
+      return data;
+    } catch (error) {
+      Logger.logError('DELETE request failed: ' + url, error);
+      throw error;
+    }
   }
 
   /**

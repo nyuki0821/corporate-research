@@ -24,15 +24,19 @@ var ConfigManager = (function() {
     // API設定
     'TAVILY_API_KEY': '',
     'OPENAI_API_KEY': '',
+    'OPENAI_MODEL': 'gpt-4o-mini',
+    'OPENAI_MAX_TOKENS': '4000',
+    'OPENAI_TEMPERATURE': '0.1',
+    'OPENAI_TIMEOUT_MS': '60000',
     
     // バッチ処理設定
-    'BATCH_SIZE': '20',
+    'BATCH_SIZE': '8', // Google Apps Script 6分制限に対応（1社40秒×8社=320秒）
     'MAX_RETRY_COUNT': '3',
     'RETRY_DELAY_MS': '1000',
     'PROCESSING_DELAY_MS': '2000',
     
     // 通知設定
-    'NOTIFICATION_EMAIL': Session.getActiveUser().getEmail(),
+    'NOTIFICATION_EMAIL': '',
     'ENABLE_NOTIFICATIONS': 'true',
     'NOTIFY_BATCH_COMPLETE': 'true',
     'NOTIFY_BATCH_ERROR': 'true',
@@ -43,7 +47,7 @@ var ConfigManager = (function() {
     // システム設定
     'LOG_RETENTION_DAYS': '30',
     'ERROR_THRESHOLD': '5',
-    'BATCH_SIZE_THRESHOLD': '50',
+    'BATCH_SIZE_THRESHOLD': '8', // 実行時間制限に合わせて調整
     'ENABLE_DEBUG_MODE': 'false',
     
     // 検索・抽出設定
@@ -52,12 +56,20 @@ var ConfigManager = (function() {
     'EXTRACTION_TIMEOUT_MS': '60000',
     'ENABLE_DETAILED_SEARCH': 'true',
     'INCLUDE_FINANCIALS': 'false',
-    'INCLUDE_BRANCHES': 'true',
+
     
     // データ品質設定
     'MIN_RELIABILITY_SCORE': '60',
     'ENABLE_MULTIPLE_COMPANY_DETECTION': 'true',
-    'ENABLE_AUTO_NORMALIZATION': 'true'
+    'ENABLE_AUTO_NORMALIZATION': 'true',
+    'ENABLE_AUTO_PROCESSING': 'false',
+    'AUTO_PROCESSING_INTERVAL': '60',
+    'ENABLE_DETAILED_LOGGING': 'true',
+    'ENABLE_FINANCIAL_DATA': 'false',
+    'ENABLE_NEWS_SUMMARY': 'true',
+    'ENABLE_RECRUITMENT_SUMMARY': 'true',
+    'ENABLE_COMPANY_PHILOSOPHY': 'true',
+    'CONTEXT_LENGTH_LIMIT': '80000'
   };
 
   // Private functions

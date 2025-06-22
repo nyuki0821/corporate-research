@@ -122,22 +122,7 @@ var SpreadsheetService = (function() {
     ];
   }
 
-  function getBranchesHeaders() {
-    return [
-      '企業名',
-      '企業ID',
-      '支店名',
-      '支店ID',
-      '住所',
-      '電話番号',
-      'タイプ',
-      '従業員数',
-      'ステータス',
-      '最終更新',
-      '営業時間',
-      '備考'
-    ];
-  }
+
 
   function getSettingsHeaders() {
     return [
@@ -209,30 +194,29 @@ var SpreadsheetService = (function() {
     return 0;
   }
 
-  /**
-   * Delete existing branches
-   * @private
-   */
-  function deleteExistingBranches(sheet, companyId) {
-    var data = sheet.getDataRange().getValues();
-    for (var i = data.length - 1; i > 0; i--) {
-      if (data[i][0] === companyId) {
-        sheet.deleteRow(i + 1);
-      }
-    }
-  }
+
 
   // Public functions
   /**
    * Initialize spreadsheet
    */
   function initializeSpreadsheet() {
+    try {
     // スプレッドシートが存在しない場合は新規作成
     if (!_spreadsheet) {
       _spreadsheet = getTargetSpreadsheet();
       Logger.logInfo('スプレッドシートを取得しました');
     }
+      
+      if (!_spreadsheet) {
+        throw new Error('スプレッドシートの初期化に失敗しました');
+      }
+      
     return _spreadsheet;
+    } catch (error) {
+      Logger.logError('Failed to initialize spreadsheet', error);
+      throw error;
+    }
   }
 
   /**
@@ -263,17 +247,38 @@ var SpreadsheetService = (function() {
    * Get spreadsheet info
    */
   function getSpreadsheetInfo() {
+    // スプレッドシートが初期化されていない場合は初期化
+    if (!_spreadsheet) {
+      try {
+        _spreadsheet = getTargetSpreadsheet();
+      } catch (error) {
+        Logger.logError('Failed to initialize spreadsheet in getSpreadsheetInfo', error);
+        return null;
+      }
+    }
+    
     if (!_spreadsheet) {
       return null;
     }
     
+    try {
     return {
       id: _spreadsheet.getId(),
       name: _spreadsheet.getName(),
       url: _spreadsheet.getUrl(),
-      lastModified: _spreadsheet.getLastUpdated(),
+        lastModified: new Date(), // getLastUpdated()は存在しないため現在時刻を使用
       owner: _spreadsheet.getOwner() ? _spreadsheet.getOwner().getEmail() : 'Unknown'
     };
+    } catch (error) {
+      Logger.logError('Failed to get spreadsheet info', error);
+      return {
+        id: 'unknown',
+        name: 'unknown',
+        url: 'unknown',
+        lastModified: new Date(),
+        owner: 'unknown'
+      };
+    }
   }
 
   /**
@@ -289,11 +294,15 @@ var SpreadsheetService = (function() {
         Logger.logInfo('スプレッドシートを取得しました');
       }
       
+      // スプレッドシートが取得できない場合はエラー
+      if (!_spreadsheet) {
+        throw new Error('スプレッドシートの取得に失敗しました。SPREADSHEET_IDを確認してください。');
+      }
+      
       // 必要なシートのリスト
       var requiredSheets = [
         { name: Constants.SHEET_CONFIG.SHEETS.COMPANY_LIST || '企業リスト', headers: getCompanyListHeaders() },
         { name: Constants.SHEET_CONFIG.SHEETS.HEADQUARTERS || '本社情報', headers: getHeadquartersHeaders() },
-        { name: Constants.SHEET_CONFIG.SHEETS.BRANCHES || '支店情報', headers: getBranchesHeaders() },
         { name: Constants.SHEET_CONFIG.SHEETS.SETTINGS || '設定', headers: getSettingsHeaders() },
         { name: Constants.SHEET_CONFIG.SHEETS.LOGS || 'ログ', headers: getLogsHeaders() },
         { name: Constants.SHEET_CONFIG.SHEETS.PROCESSING_STATUS || '処理状況', headers: getProcessingStatusHeaders() }
@@ -334,6 +343,11 @@ var SpreadsheetService = (function() {
    * Get company list
    */
   function getCompanyList(status) {
+    // スプレッドシートが初期化されていない場合は初期化
+    if (!_spreadsheet) {
+      _spreadsheet = getTargetSpreadsheet();
+    }
+    
     var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.COMPANY_LIST || '企業リスト');
     if (!sheet || sheet.getLastRow() <= 1) return [];
 
@@ -353,7 +367,16 @@ var SpreadsheetService = (function() {
         error: row[4]
       };
 
-      if (!status || company.status === status) {
+      // ステータスフィルタリング
+      if (!status) {
+        companies.push(company);
+      } else if (status === '未処理') {
+        // 「未処理」を指定した場合は、「未処理」と「処理中」の両方を含める
+        // 「処理中」は前回のバッチでタイムアウトした可能性があるため
+        if (company.status === '未処理' || company.status === '処理中') {
+          companies.push(company);
+        }
+      } else if (company.status === status) {
         companies.push(company);
       }
     }
@@ -362,16 +385,49 @@ var SpreadsheetService = (function() {
   }
 
   /**
+   * Get company status
+   */
+  function getCompanyStatus(rowIndex) {
+    try {
+      // スプレッドシートが初期化されていない場合は初期化
+      if (!_spreadsheet) {
+        _spreadsheet = getTargetSpreadsheet();
+      }
+      
+      var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.COMPANY_LIST || '企業リスト');
+      if (!sheet) return '未処理';
+      
+      var statusCell = sheet.getRange(rowIndex, 3);
+      var status = statusCell.getValue();
+      return status || '未処理';
+    } catch (error) {
+      Logger.logError('Failed to get company status', error);
+      return '未処理';
+    }
+  }
+
+  /**
    * Update company status
    */
   function updateCompanyStatus(rowIndex, status, error) {
+    try {
     if (!error) error = '';
+      
+      // スプレッドシートが初期化されていない場合は初期化
+      if (!_spreadsheet) {
+        _spreadsheet = getTargetSpreadsheet();
+      }
     
     var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.COMPANY_LIST || '企業リスト');
-    if (!sheet) return;
+      if (!sheet) return false;
 
     var range = sheet.getRange(rowIndex, 3, 1, 3);
     range.setValues([[status, new Date(), error]]);
+      return true;
+    } catch (err) {
+      Logger.logError('Failed to update company status', err);
+      return false;
+    }
   }
 
   /**
@@ -379,6 +435,11 @@ var SpreadsheetService = (function() {
    */
   function saveHeadquartersInfo(company) {
     try {
+      // スプレッドシートが初期化されていない場合は初期化
+      if (!_spreadsheet) {
+        _spreadsheet = getTargetSpreadsheet();
+      }
+      
       var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.HEADQUARTERS || '本社情報');
       if (!sheet) throw new Error('Headquarters sheet not found');
 
@@ -403,39 +464,69 @@ var SpreadsheetService = (function() {
     }
   }
 
+
+
   /**
-   * Save branches info
+   * Save news summary
    */
-  function saveBranchesInfo(companyId, branches) {
+  function saveNewsSummary(companyId, newsSummary) {
     try {
-      var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.BRANCHES || '支店情報');
-      if (!sheet) throw new Error('Branches sheet not found');
+      // スプレッドシートが初期化されていない場合は初期化
+      if (!_spreadsheet) {
+        _spreadsheet = getTargetSpreadsheet();
+      }
+      
+      // ニュースサマリーは本社情報シートの対応する行に保存
+      var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.HEADQUARTERS || '本社情報');
+      if (!sheet) throw new Error('Headquarters sheet not found');
 
-      // 既存の支店データを削除
-      deleteExistingBranches(sheet, companyId);
-
-      // 新しい支店データを追加
-      branches.forEach(function(branch) {
-        var rowData = [
-          companyId,
-          branch.name,
-          branch.phone,
-          branch.postalCode,
-          branch.prefecture,
-          branch.city,
-          branch.addressDetail,
-          branch.type,
-          branch.importanceRank,
-          branch.employeeCount,
-          branch.businessHours,
-          branch.notes
-        ];
-        sheet.appendRow(rowData);
-      });
-
-      return true;
+      var existingRow = findCompanyRow(sheet, companyId);
+      if (existingRow > 0) {
+        // 最新ニュース列に保存（18列目）
+        var newsText = newsSummary.summary || '';
+        if (newsSummary.keyPoints && newsSummary.keyPoints.length > 0) {
+          newsText += '\n重要ポイント: ' + newsSummary.keyPoints.join(', ');
+        }
+        sheet.getRange(existingRow, 18).setValue(newsText);
+        return true;
+      }
+      return false;
     } catch (error) {
-      Logger.logError('Failed to save branches info', error);
+      Logger.logError('Failed to save news summary', error);
+      return false;
+    }
+  }
+
+  /**
+   * Save recruitment summary
+   */
+  function saveRecruitmentSummary(companyId, recruitmentSummary) {
+    try {
+      // スプレッドシートが初期化されていない場合は初期化
+      if (!_spreadsheet) {
+        _spreadsheet = getTargetSpreadsheet();
+      }
+      
+      // 採用情報サマリーは本社情報シートの対応する行に保存
+      var sheet = _spreadsheet.getSheetByName(Constants.SHEET_CONFIG.SHEETS.HEADQUARTERS || '本社情報');
+      if (!sheet) throw new Error('Headquarters sheet not found');
+
+      var existingRow = findCompanyRow(sheet, companyId);
+      if (existingRow > 0) {
+        // 採用状況列に保存（19列目）
+        var recruitmentText = recruitmentSummary.summary || '';
+        if (recruitmentSummary.companyGrowth) {
+          recruitmentText += '\n成長性: ' + recruitmentSummary.companyGrowth;
+        }
+        if (recruitmentSummary.businessOpportunity) {
+          recruitmentText += '\n営業機会: ' + recruitmentSummary.businessOpportunity;
+        }
+        sheet.getRange(existingRow, 19).setValue(recruitmentText);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      Logger.logError('Failed to save recruitment summary', error);
       return false;
     }
   }
@@ -490,9 +581,11 @@ var SpreadsheetService = (function() {
     getSpreadsheetInfo: getSpreadsheetInfo,
     initializeSheets: initializeSheets,
     getCompanyList: getCompanyList,
+    getCompanyStatus: getCompanyStatus,
     updateCompanyStatus: updateCompanyStatus,
     saveHeadquartersInfo: saveHeadquartersInfo,
-    saveBranchesInfo: saveBranchesInfo,
+    saveNewsSummary: saveNewsSummary,
+    saveRecruitmentSummary: saveRecruitmentSummary,
     recordProcessingStatus: recordProcessingStatus,
     exportData: exportData,
     getCompanyBatch: getCompanyBatch,

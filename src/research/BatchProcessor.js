@@ -112,62 +112,136 @@ var BatchProcessor = (function() {
           // Fallback: simulate processing for testing
           Logger.logWarning('CompanyResearchService not available, using mock processing');
           
-          setTimeout(function() {
-            // Mock successful processing
+          // Google Apps ScriptではsetTimeoutの代わりにUtilities.sleepを使用
+          Utilities.sleep(1000); // Simulate processing time
+          
+          // Mock successful processing
+          if (typeof SpreadsheetService !== 'undefined') {
+            SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了（テスト）', '');
+          }
+          
+          updateStats(true);
+          resolve({
+            success: true,
+            company: company,
+            data: { name: company.name, mockData: true }
+          });
+          
+          return;
+        }
+        
+        // Use actual research service
+        try {
+          var result = CompanyResearchService.researchCompany(company.name, company.phone);
+          
+          if (result.success) {
+            // トランザクション的な保存処理
+            try {
             if (typeof SpreadsheetService !== 'undefined') {
-              SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了（テスト）', '');
+                // 1. まず処理中ステータスに更新（既に処理中の場合はスキップ）
+                var currentStatus = SpreadsheetService.getCompanyStatus(company.rowIndex);
+                if (currentStatus !== '処理中') {
+                  SpreadsheetService.updateCompanyStatus(company.rowIndex, '処理中', '');
+                }
+                
+                // 2. すべてのデータ保存を実行
+                var saveSuccess = true;
+                var saveError = null;
+                
+                try {
+                  // Companyオブジェクトを作成
+                  var companyData = result.data;
+                  var companyObj = new Company({
+                    id: company.id,
+                    companyName: companyData.companyName || company.name,
+                    officialName: companyData.officialName || companyData.companyName || company.name,
+                    phone: companyData.phone || company.phoneNumber,
+                    industryLarge: companyData.industryLarge,
+                    industryMedium: companyData.industryMedium,
+                    employees: companyData.employees,
+                    establishedYear: companyData.establishedYear,
+                    capital: companyData.capital,
+                    listingStatus: companyData.listingStatus,
+                    postalCode: companyData.postalCode,
+                    prefecture: companyData.prefecture,
+                    city: companyData.city,
+                    addressDetail: companyData.addressDetail,
+                    representativeName: companyData.representativeName,
+                    representativeTitle: companyData.representativeTitle,
+                    philosophy: companyData.philosophy,
+                    latestNews: companyData.latestNews,
+                    recruitmentStatus: companyData.recruitmentStatus,
+                    website: companyData.website,
+                    reliabilityScore: companyData.reliabilityScore,
+
+                    processedAt: new Date().toISOString(),
+                    processingResult: 'SUCCESS'
+                  });
+                  
+                  // 本社情報を保存
+                  if (!SpreadsheetService.saveHeadquartersInfo(companyObj)) {
+                    throw new Error('Failed to save headquarters info');
+                  }
+                  Logger.logInfo('本社情報保存完了: ' + company.name);
+                  
+
+                  
+                } catch (saveErr) {
+                  saveSuccess = false;
+                  saveError = saveErr;
+                }
+                
+                // 3. 保存結果に応じてステータスを更新
+                if (saveSuccess) {
+              SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了', '');
+                  Logger.logInfo('Company data saved successfully: ' + company.name);
+                } else {
+                  SpreadsheetService.updateCompanyStatus(company.rowIndex, 'エラー', 'データ保存失敗: ' + saveError.message);
+                  throw saveError;
+              }
             }
             
             updateStats(true);
             resolve({
               success: true,
               company: company,
-              data: { name: company.name, mockData: true }
+              data: result
             });
-          }, 1000); // Simulate processing time
-          
-          return;
-        }
-        
-        // Use actual research service
-        CompanyResearchService.researchCompany(company.name, company.phone)
-          .then(function(result) {
-            if (result.success) {
-              // Save to spreadsheet
+              
+            } catch (saveError) {
+              Logger.logError('Failed to save company data: ' + company.name, saveError);
+              
+              // 保存エラーの場合はステータスをエラーに設定
               if (typeof SpreadsheetService !== 'undefined') {
-                SpreadsheetService.updateCompanyStatus(company.rowIndex, '完了', '');
-                SpreadsheetService.saveHeadquartersInfo(result.company);
-                
-                if (result.branches && result.branches.length > 0) {
-                  SpreadsheetService.saveBranchesInfo(result.company.id, result.branches);
-                }
+                SpreadsheetService.updateCompanyStatus(company.rowIndex, 'エラー', 'データ保存エラー: ' + saveError.message);
               }
               
-              updateStats(true);
+              updateStats(false);
               resolve({
-                success: true,
+                success: false,
                 company: company,
-                data: result
+                error: saveError
               });
-            } else {
-              throw new Error(result.error || 'Research failed');
-            }
-          })
-          .catch(function(error) {
-            Logger.logError('Company processing failed: ' + company.name, error);
-            
-            // Update status to error
-            if (typeof SpreadsheetService !== 'undefined') {
-              SpreadsheetService.updateCompanyStatus(company.rowIndex, 'エラー', error.message);
             }
             
-            updateStats(false);
-            resolve({
-              success: false,
-              company: company,
-              error: error
-            });
+          } else {
+            throw new Error(result.error || 'Research failed');
+          }
+        } catch (error) {
+          Logger.logError('Company processing failed: ' + company.name, error);
+          
+          // Update status to error
+          if (typeof SpreadsheetService !== 'undefined') {
+            SpreadsheetService.updateCompanyStatus(company.rowIndex, 'エラー', error.message);
+          }
+          
+          updateStats(false);
+          resolve({
+            success: false,
+            company: company,
+            error: error
           });
+        }
           
       } catch (error) {
         Logger.logError('Exception in processSingleCompany', error);
@@ -214,7 +288,9 @@ var BatchProcessor = (function() {
             
             // Continue with delay
             if (currentIndex < companies.length) {
-              setTimeout(processNext, delayMs);
+              // Google Apps ScriptではsetTimeoutの代わりにUtilities.sleepを使用
+              Utilities.sleep(delayMs);
+              processNext();
             } else {
               resolve(results);
             }
@@ -281,6 +357,17 @@ var BatchProcessor = (function() {
       if (companies.length === 0) {
         Logger.logInfo('処理対象の企業がありません');
         _isProcessing = false;
+        
+        // TriggerManagerの状態も自動リセット
+        if (typeof TriggerManager !== 'undefined') {
+          try {
+            TriggerManager.resetBatchProcessingStatus();
+            Logger.logInfo('バッチ処理状態を自動リセットしました（対象企業なし）');
+          } catch (resetError) {
+            Logger.logWarning('バッチ処理状態のリセットに失敗しました', resetError);
+          }
+        }
+        
         return;
       }
       
@@ -301,10 +388,31 @@ var BatchProcessor = (function() {
         })
         .finally(function() {
           _isProcessing = false;
+          
+          // TriggerManagerの状態も自動リセット
+          if (typeof TriggerManager !== 'undefined') {
+            try {
+              TriggerManager.resetBatchProcessingStatus();
+              Logger.logInfo('バッチ処理状態を自動リセットしました（処理完了）');
+            } catch (resetError) {
+              Logger.logWarning('バッチ処理状態のリセットに失敗しました', resetError);
+            }
+          }
         });
         
     } catch (error) {
       _isProcessing = false;
+      
+      // エラー時もTriggerManagerの状態をリセット
+      if (typeof TriggerManager !== 'undefined') {
+        try {
+          TriggerManager.resetBatchProcessingStatus();
+          Logger.logInfo('バッチ処理状態を自動リセットしました（エラー発生）');
+        } catch (resetError) {
+          Logger.logWarning('バッチ処理状態のリセットに失敗しました', resetError);
+        }
+      }
+      
       Logger.logError('バッチ処理の開始でエラーが発生しました', error);
       throw error;
     }
