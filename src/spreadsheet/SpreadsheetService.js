@@ -522,7 +522,7 @@ var SpreadsheetService = (function() {
           recruitmentText += '\n営業機会: ' + recruitmentSummary.businessOpportunity;
         }
         sheet.getRange(existingRow, 19).setValue(recruitmentText);
-        return true;
+      return true;
       }
       return false;
     } catch (error) {

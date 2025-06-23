@@ -829,6 +829,159 @@ var Main = (function() {
     }
   }
 
+  /**
+   * Auto continue batch processing (triggered function)
+   */
+  function continueAutoBatchProcessing() {
+    try {
+      Logger.logInfo('自動継続バッチ処理を開始します');
+      
+      // 現在のトリガーを削除（一回限りの実行）
+      var triggers = ScriptApp.getProjectTriggers();
+      triggers.forEach(function(trigger) {
+        if (trigger.getHandlerFunction() === 'continueAutoBatchProcessing') {
+          ScriptApp.deleteTrigger(trigger);
+        }
+      });
+      
+      // バッチ処理が既に実行中でないことを確認
+      if (typeof BatchProcessor !== 'undefined') {
+        var status = BatchProcessor.getProcessingStatus();
+        if (status.isProcessing) {
+          Logger.logWarning('バッチ処理が既に実行中のため自動継続をスキップします');
+          return;
+        }
+        
+        // 自動継続が有効で未処理企業があることを確認
+        var autoContinueStatus = BatchProcessor.getAutoContinueStatus();
+        if (!autoContinueStatus.enabled || !autoContinueStatus.configEnabled) {
+          Logger.logInfo('自動継続機能が無効のため処理を終了します');
+          return;
+        }
+        
+        if (!autoContinueStatus.hasUnprocessedCompanies) {
+          Logger.logInfo('未処理企業がないため自動継続を終了します');
+          return;
+        }
+        
+        // バッチ処理を再開
+        Logger.logInfo('自動継続によりバッチ処理を再開します');
+        BatchProcessor.startBatchProcessing();
+        
+      } else {
+        Logger.logError('BatchProcessor not available for auto continue');
+      }
+      
+    } catch (error) {
+      Logger.logError('自動継続バッチ処理でエラーが発生しました', error);
+      ErrorHandler.handleError(error, { function: 'continueAutoBatchProcessing' });
+    }
+  }
+
+  /**
+   * Configure auto continue settings manually
+   */
+  function configureAutoContinueManually() {
+    try {
+      var ui = SpreadsheetApp.getUi();
+      var currentSetting = ConfigManager.getBoolean('ENABLE_AUTO_CONTINUE', true);
+      
+      var response = ui.prompt(
+        '自動継続設定',
+        '自動継続機能を有効にしますか？\n' +
+        '現在の設定: ' + (currentSetting ? '有効' : '無効') + '\n\n' +
+        '「true」で有効、「false」で無効にします:',
+        ui.ButtonSet.OK_CANCEL
+      );
+      
+      if (response.getSelectedButton() === ui.Button.OK) {
+        var input = response.getResponseText().toLowerCase();
+        var newSetting = input === 'true' || input === '1' || input === 'yes' || input === 'on';
+        
+        ConfigManager.set('ENABLE_AUTO_CONTINUE', newSetting.toString());
+        
+        if (typeof BatchProcessor !== 'undefined') {
+          BatchProcessor.setAutoContinue(newSetting);
+        }
+        
+        ui.alert(
+          '設定完了',
+          '自動継続機能を' + (newSetting ? '有効' : '無効') + 'にしました。\n\n' +
+          (newSetting ? 
+            '未処理企業がある限り、バッチ処理が自動的に継続されます。' : 
+            'バッチ処理は手動で再開する必要があります。'),
+          ui.ButtonSet.OK
+        );
+      }
+      
+    } catch (error) {
+      Logger.logError('Error in configureAutoContinueManually', error);
+      SpreadsheetApp.getUi().alert('エラー', '自動継続設定中にエラーが発生しました: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    }
+  }
+
+  /**
+   * Check auto continue status manually
+   */
+  function checkAutoContinueStatusManually() {
+    try {
+      var ui = SpreadsheetApp.getUi();
+      var message = '🔄 自動継続機能の状況\n\n';
+      
+      // 設定確認
+      var configEnabled = ConfigManager.getBoolean('ENABLE_AUTO_CONTINUE', true);
+      message += '設定状態: ' + (configEnabled ? '✅ 有効' : '❌ 無効') + '\n';
+      
+      // BatchProcessorの状態確認
+      if (typeof BatchProcessor !== 'undefined') {
+        var status = BatchProcessor.getAutoContinueStatus();
+        message += 'システム状態: ' + (status.enabled ? '✅ 有効' : '❌ 無効') + '\n';
+        message += '未処理企業: ' + (status.hasUnprocessedCompanies ? '✅ あり' : '❌ なし') + '\n';
+        
+        // 処理状況
+        var processingStatus = BatchProcessor.getProcessingStatus();
+        message += 'バッチ処理: ' + (processingStatus.isProcessing ? '🔄 実行中' : '⏸️ 停止中') + '\n';
+        
+      } else {
+        message += 'システム状態: ❌ BatchProcessor利用不可\n';
+      }
+      
+      // 未処理企業数の確認
+      try {
+        var companies = SpreadsheetService.getCompanyList('未処理');
+        message += '\n📊 処理状況:\n';
+        message += '未処理企業数: ' + companies.length + '社\n';
+        
+        if (companies.length > 0) {
+          var batchSize = ConfigManager.getNumber('BATCH_SIZE', 8);
+          var estimatedBatches = Math.ceil(companies.length / batchSize);
+          message += '推定バッチ数: ' + estimatedBatches + '回\n';
+          message += '推定処理時間: ' + (estimatedBatches * 6) + '分程度\n';
+        }
+        
+      } catch (error) {
+        message += '\n⚠️ 企業リスト取得エラー: ' + error.message + '\n';
+      }
+      
+      // 自動継続の動作説明
+      message += '\n💡 自動継続機能について:\n';
+      if (configEnabled) {
+        message += '• 6分のタイムアウト後、5秒待機して自動再開\n';
+        message += '• 未処理企業がなくなるまで継続\n';
+        message += '• 手動停止で無効化可能\n';
+      } else {
+        message += '• 現在無効のため手動再開が必要\n';
+        message += '• 「自動継続設定」で有効化可能\n';
+      }
+      
+      ui.alert('自動継続状況', message, ui.ButtonSet.OK);
+      
+    } catch (error) {
+      Logger.logError('Error in checkAutoContinueStatusManually', error);
+      SpreadsheetApp.getUi().alert('エラー', '自動継続状況確認中にエラーが発生しました: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    }
+  }
+
   // Return public API
   return {
     onOpen: onOpen,
@@ -845,11 +998,13 @@ var Main = (function() {
     diagnoseSystem: diagnoseSystem,
     checkCompanyListStatus: checkCompanyListStatus,
     parseAddressString: parseAddressString,
-
     showProcessStatusDialog: showProcessStatusDialog,
     createMenuBySpreadsheetId: createMenuBySpreadsheetId,
     setupSpreadsheetBinding: setupSpreadsheetBinding,
-    setupSpreadsheetBindingWithUrl: setupSpreadsheetBindingWithUrl
+    setupSpreadsheetBindingWithUrl: setupSpreadsheetBindingWithUrl,
+    continueAutoBatchProcessing: continueAutoBatchProcessing,
+    configureAutoContinueManually: configureAutoContinueManually,
+    checkAutoContinueStatusManually: checkAutoContinueStatusManually
   };
 })();
 
@@ -962,6 +1117,14 @@ function checkProcessStatusManually() {
     Logger.logError('Error in checkProcessStatusManually', error);
     SpreadsheetApp.getUi().alert('エラー', 'プロセス状況確認中にエラーが発生しました: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
   }
+}
+
+function configureAutoContinueManually() {
+  return Main.configureAutoContinueManually();
+}
+
+function checkAutoContinueStatusManually() {
+  return Main.checkAutoContinueStatusManually();
 }
 
 function executeSystemMaintenanceManually() {
@@ -1093,4 +1256,8 @@ function setupSpreadsheetBinding() {
 
 function setupSpreadsheetBindingWithUrl(spreadsheetUrl) {
   return Main.setupSpreadsheetBindingWithUrl(spreadsheetUrl);
+}
+
+function continueAutoBatchProcessing() {
+  return Main.continueAutoBatchProcessing();
 }

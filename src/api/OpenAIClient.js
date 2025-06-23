@@ -320,6 +320,15 @@ var OpenAIClient = (function() {
 
       Logger.logDebug('Received response from OpenAI API for: ' + companyName);
 
+      if (response && response.usage) {
+        Logger.logInfo('OpenAI API Usage (Company Info)', {
+          companyName: companyName,
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens
+        });
+      }
+
       if (!response.choices || response.choices.length === 0) {
         throw new Error('No response from OpenAI API');
       }
@@ -493,6 +502,15 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
 
         ApiBase.post(_baseUrl + '/chat/completions', requestData, requestOptions)
           .then(function(response) {
+            if (response && response.usage) {
+              Logger.logInfo('OpenAI API Usage (Summary)', {
+                companyName: companyData.companyName,
+                promptTokens: response.usage.prompt_tokens,
+                completionTokens: response.usage.completion_tokens,
+                totalTokens: response.usage.total_tokens
+              });
+            }
+
             if (!response.choices || response.choices.length === 0) {
               throw new Error('No response choices returned from OpenAI');
             }
@@ -567,6 +585,15 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
         timeout: ConfigManager.getNumber('OPENAI_TIMEOUT_MS', 30000),
         useCache: false
       });
+
+      if (response && response.usage) {
+        Logger.logInfo('OpenAI API Usage (News Summary)', {
+          companyName: companyName,
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens
+        });
+      }
 
       if (!response.choices || response.choices.length === 0) {
         throw new Error('No response from OpenAI API');
@@ -658,6 +685,15 @@ ${additionalContext ? '追加情報:\n' + additionalContext : ''}
         timeout: ConfigManager.getNumber('OPENAI_TIMEOUT_MS', 30000),
         useCache: false
       });
+
+      if (response && response.usage) {
+        Logger.logInfo('OpenAI API Usage (Recruitment Summary)', {
+          companyName: companyName,
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens
+        });
+      }
 
       if (!response.choices || response.choices.length === 0) {
         throw new Error('No response from OpenAI API');

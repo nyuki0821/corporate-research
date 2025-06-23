@@ -34,6 +34,8 @@ var ConfigManager = (function() {
     'MAX_RETRY_COUNT': '3',
     'RETRY_DELAY_MS': '1000',
     'PROCESSING_DELAY_MS': '2000',
+    'ENABLE_AUTO_CONTINUE': 'true', // 未処理企業がある限り自動継続
+    'AUTO_CONTINUE_DELAY_MS': '5000', // 自動継続時の待機時間（5秒）
     
     // 通知設定
     'NOTIFICATION_EMAIL': '',

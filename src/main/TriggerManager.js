@@ -255,7 +255,7 @@ var TriggerManager = (function() {
       setProcessStatus('batchProcessing', false);
       Logger.logInfo('バッチ処理状態を自動リセットしました');
       
-      return {
+  return {
         success: true,
         message: 'Batch processing status reset successfully'
       };
@@ -273,8 +273,8 @@ var TriggerManager = (function() {
   /**
    * Execute system maintenance manually
    */
-  function executeSystemMaintenance() {
-    try {
+function executeSystemMaintenance() {
+  try {
       if (getProcessStatus('systemMaintenance')) {
         Logger.logWarning('System maintenance is already running');
         return {
@@ -307,8 +307,8 @@ var TriggerManager = (function() {
         message: 'System maintenance completed successfully'
       };
       
-    } catch (error) {
-      Logger.logError('Error in system maintenance', error);
+  } catch (error) {
+    Logger.logError('Error in system maintenance', error);
       setProcessStatus('systemMaintenance', false);
       
       return {
@@ -322,14 +322,14 @@ var TriggerManager = (function() {
    * Execute error monitoring manually
    */
   function executeErrorMonitoring() {
-    try {
+  try {
       if (getProcessStatus('errorMonitoring')) {
         Logger.logWarning('Error monitoring is already running');
         return {
           success: false,
           error: 'Error monitoring is already running'
         };
-      }
+  }
       
       setProcessStatus('errorMonitoring', true);
       Logger.logInfo('Starting manual error monitoring');
@@ -368,22 +368,22 @@ var TriggerManager = (function() {
         alerts: result.alerts || []
       };
       
-    } catch (error) {
-      Logger.logError('Error in error monitoring', error);
+  } catch (error) {
+    Logger.logError('Error in error monitoring', error);
       setProcessStatus('errorMonitoring', false);
       
       return {
         success: false,
         error: error.message
       };
-    }
   }
+}
 
   /**
    * Execute performance check manually
    */
-  function executePerformanceCheck() {
-    try {
+function executePerformanceCheck() {
+  try {
       if (getProcessStatus('performanceCheck')) {
         Logger.logWarning('Performance check is already running');
         return {

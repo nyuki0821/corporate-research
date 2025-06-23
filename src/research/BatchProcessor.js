@@ -15,6 +15,7 @@ var BatchProcessor = (function() {
   // Private variables
   var _currentBatch = null;
   var _isProcessing = false;
+  var _autoContinueEnabled = true; // 自動継続機能のフラグ
   var _processingStats = {
     total: 0,
     processed: 0,
@@ -80,6 +81,52 @@ var BatchProcessor = (function() {
         status: _processingStats.errors > 0 ? 'PARTIAL_SUCCESS' : 'SUCCESS',
         notes: ''
       });
+    }
+  }
+
+  /**
+   * Check if there are more companies to process
+   * @private
+   */
+  function hasMoreUnprocessedCompanies() {
+    try {
+      var companies = SpreadsheetService.getCompanyList('未処理');
+      return companies.length > 0;
+    } catch (error) {
+      Logger.logError('Failed to check unprocessed companies', error);
+      return false;
+    }
+  }
+
+  /**
+   * Schedule auto continue processing
+   * @private
+   */
+  function scheduleAutoContinue() {
+    if (!_autoContinueEnabled || !ConfigManager.getBoolean('ENABLE_AUTO_CONTINUE', true)) {
+      Logger.logInfo('自動継続機能が無効です');
+      return;
+    }
+
+    if (!hasMoreUnprocessedCompanies()) {
+      Logger.logInfo('未処理企業がないため自動継続を終了します');
+      return;
+    }
+
+    var delay = ConfigManager.getNumber('AUTO_CONTINUE_DELAY_MS', 5000);
+    Logger.logInfo('自動継続を' + delay + 'ms後に開始します');
+
+    // Google Apps Scriptでは時間ベースのトリガーを使用して自動継続
+    try {
+      // 短時間後に実行するトリガーを作成
+      ScriptApp.newTrigger('continueAutoBatchProcessing')
+        .timeBased()
+        .after(delay)
+        .create();
+      
+      Logger.logInfo('自動継続トリガーを作成しました');
+    } catch (error) {
+      Logger.logError('自動継続トリガーの作成に失敗しました', error);
     }
   }
 
@@ -381,22 +428,35 @@ var BatchProcessor = (function() {
         .then(function(results) {
           Logger.logInfo('バッチ処理が正常に完了しました');
           sendNotification(results);
+          
+          // 自動継続のチェック
+          scheduleAutoContinue();
         })
         .catch(function(error) {
           Logger.logError('バッチ処理でエラーが発生しました', error);
           ErrorHandler.handleError(error, { function: 'startBatchProcessing' });
+          
+          // エラー時も自動継続のチェック（軽微なエラーの場合は継続）
+          if (hasMoreUnprocessedCompanies()) {
+            Logger.logInfo('エラー発生後も未処理企業があるため自動継続を検討します');
+            scheduleAutoContinue();
+          }
         })
         .finally(function() {
           _isProcessing = false;
           
-          // TriggerManagerの状態も自動リセット
-          if (typeof TriggerManager !== 'undefined') {
-            try {
-              TriggerManager.resetBatchProcessingStatus();
-              Logger.logInfo('バッチ処理状態を自動リセットしました（処理完了）');
-            } catch (resetError) {
-              Logger.logWarning('バッチ処理状態のリセットに失敗しました', resetError);
+          // TriggerManagerの状態は自動継続がない場合のみリセット
+          if (!hasMoreUnprocessedCompanies() || !_autoContinueEnabled || !ConfigManager.getBoolean('ENABLE_AUTO_CONTINUE', true)) {
+            if (typeof TriggerManager !== 'undefined') {
+              try {
+                TriggerManager.resetBatchProcessingStatus();
+                Logger.logInfo('バッチ処理状態を自動リセットしました（全処理完了）');
+              } catch (resetError) {
+                Logger.logWarning('バッチ処理状態のリセットに失敗しました', resetError);
+              }
             }
+          } else {
+            Logger.logInfo('自動継続のためバッチ処理状態を維持します');
           }
         });
         
@@ -472,7 +532,22 @@ var BatchProcessor = (function() {
     if (_isProcessing) {
       Logger.logWarning('Batch processing stopped by user');
       _isProcessing = false;
+      _autoContinueEnabled = false; // 手動停止時は自動継続も無効化
       finalizeStats();
+      
+      // 既存の自動継続トリガーも削除
+      try {
+        var triggers = ScriptApp.getProjectTriggers();
+        triggers.forEach(function(trigger) {
+          if (trigger.getHandlerFunction() === 'continueAutoBatchProcessing') {
+            ScriptApp.deleteTrigger(trigger);
+            Logger.logInfo('自動継続トリガーを削除しました');
+          }
+        });
+      } catch (error) {
+        Logger.logWarning('自動継続トリガーの削除に失敗しました', error);
+      }
+      
       return true;
     }
     return false;
@@ -513,12 +588,33 @@ var BatchProcessor = (function() {
     });
   }
 
+  /**
+   * Enable or disable auto continue feature
+   */
+  function setAutoContinue(enabled) {
+    _autoContinueEnabled = enabled;
+    Logger.logInfo('自動継続機能を' + (enabled ? '有効' : '無効') + 'にしました');
+  }
+
+  /**
+   * Get auto continue status
+   */
+  function getAutoContinueStatus() {
+    return {
+      enabled: _autoContinueEnabled,
+      configEnabled: ConfigManager.getBoolean('ENABLE_AUTO_CONTINUE', true),
+      hasUnprocessedCompanies: hasMoreUnprocessedCompanies()
+    };
+  }
+
   // Return public API
   return {
     startBatchProcessing: startBatchProcessing,
     processBatch: processBatch,
     getProcessingStatus: getProcessingStatus,
     stopProcessing: stopProcessing,
-    processSpecificCompanies: processSpecificCompanies
+    processSpecificCompanies: processSpecificCompanies,
+    setAutoContinue: setAutoContinue,
+    getAutoContinueStatus: getAutoContinueStatus
   };
 })();

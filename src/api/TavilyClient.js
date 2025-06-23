@@ -159,27 +159,27 @@ var TavilyClient = (function() {
       // 各クエリを実行（公式サイト優先戦略）
       for (var i = 0; i < queries.length; i++) {
         try {
-          var requestPayload = Object.assign({
-            api_key: apiKey,
+      var requestPayload = Object.assign({
+        api_key: apiKey,
             query: queries[i],
             search_depth: 'advanced',
             max_results: i === 0 ? 8 : 6, // 公式サイト検索は多めに取得
             include_domains: [], // 信頼できるドメインがあれば追加
             exclude_domains: ['doda.jp', 'mynavi.jp', 'rikunabi.com', 'indeed.com', 'careercross.com'] // 求人サイトを除外
-          }, searchOptions);
+      }, searchOptions);
 
-          var requestOptions = {
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
-            useCache: true,
-            cacheExpiration: Constants.CACHE_CONFIG.DURATION.LONG
-          };
+      var requestOptions = {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: ConfigManager.getNumber('SEARCH_TIMEOUT_MS', 30000),
+        useCache: true,
+        cacheExpiration: Constants.CACHE_CONFIG.DURATION.LONG
+      };
 
-          var response = ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions);
-          var formatted = formatSearchResults(response);
-          
+      var response = ApiBase.post(_baseUrl + '/search', requestPayload, requestOptions);
+      var formatted = formatSearchResults(response);
+      
           if (formatted.success && formatted.results) {
             // 結果を処理
             formatted.results.forEach(function(result) {
@@ -216,7 +216,7 @@ var TavilyClient = (function() {
                   result.isOfficial = true;
                   result.priority = 1; // 最高優先度
                   Logger.logInfo('Official site found: ' + result.url + ' for ' + companyName);
-                } else {
+      } else {
                   result.priority = i === 0 ? 2 : 3; // 公式サイト検索からの結果は優先度高め
                 }
                 
@@ -285,7 +285,7 @@ var TavilyClient = (function() {
         officialSiteUrl: officialSiteUrl,
         queriesExecuted: i + 1,
         strategy: 'official-site-first'
-      });
+        });
       
       return result;
 
